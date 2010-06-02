@@ -11,6 +11,8 @@ option(WITH_YAF_RUBY_BINDINGS "Enable the YafaRay Ruby bindings" OFF)
 option(BUILDRELEASE "Enable release mode building of YafaRay" OFF)
 option(EMBED_FONT_QT "Embed font for QT GUI (usefull for some buggy QT installations)" OFF)
 option(DEBUG_BUILD "Enable debug build mode" OFF)
+option(WITH_TESTS "Enable building test applications for various components of Yafaray" OFF)
+option(WITH_OPENCL "Enable the use of OpenCL and GPU accelerated rendering where avaialble" OFF)
 
 ###### Packages and Definitions #########
 
@@ -84,6 +86,10 @@ if (WITH_YAF_RUBY_BINDINGS)
 		set(WITH_YAF_RUBY_BINDINGS OFF)
 	endif (NOT SWIG_FOUND OR NOT RUBY_FOUND)
 endif (WITH_YAF_RUBY_BINDINGS)
+
+if (WITH_OPENCL)
+	find_package(OpenCL REQUIRED)
+endif (WITH_OPENCL)
 
 if(DEBUG_BUILD)
 	set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build mode" FORCE)
@@ -202,6 +208,10 @@ endif (USER_DBGFLAGS)
 # Adding subdirectories
 
 add_subdirectory(src)
+
+if (WITH_TESTS)
+	add_subdirectory(test)
+endif (WITH_TESTS)
 
 if (WITH_YAF_PY_BINDINGS)
 	include(${SWIG_USE_FILE})
