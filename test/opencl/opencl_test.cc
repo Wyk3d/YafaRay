@@ -179,7 +179,7 @@ public:
 		
 	}
 
-	CLCombinedError(CLError err) : CLError(err) {
+	CLCombinedError(CLError err) : CLError(err), success(true) {
 
 	}
 
@@ -191,7 +191,7 @@ public:
 CLCombinedError CLError::operator||(bool error_condition)
 {
 	if(error_condition) {
-		return CLCombinedError(false, *this);
+		return CLCombinedError(!error_condition, *this);
 	} else
 		return *this;
 }
@@ -694,46 +694,81 @@ void printPlatformInfo(CLPlatform platform) {
 }
 
 void printDeviceInfo(CLDevice device) {
-	std::cout << "Device " << device.getName() << " (" << device.getId() << ")" << std::endl;
-	std::cout << "type: " << device.getType() << std::endl;
-	std::cout << "vendor: " << device.getVendor() << " (" << device.getVendorId() << ")" << std::endl;
-	std::cout << "version: " << device.getVersion() << std::endl;
-	std::cout << "driver version: " << device.getDriverVersion() << std::endl;
-	std::cout << "profile: " << device.getProfile() << std::endl;
-	std::cout << "extensions: " << device.getExtensions() << std::endl;
-	std::cout << "max compute units: " << device.getMaxComputeUnits() << std::endl;
-	int dim =  device.getMaxWorkItemDimensions();
+	CLError err;
+	std::cout << "Device " << device.getName(&err) << " (" << device.getId() << ")" << std::endl;
+	checkErr(err);
+	std::cout << "type: " << device.getType(&err) << std::endl;
+	checkErr(err);
+	std::cout << "vendor: " << device.getVendor(&err) << " (" << device.getVendorId(&err) << ")" << std::endl;
+	checkErr(err);
+	std::cout << "version: " << device.getVersion(&err) << std::endl;
+	checkErr(err);
+	std::cout << "driver version: " << device.getDriverVersion(&err) << std::endl;
+	checkErr(err);
+	std::cout << "profile: " << device.getProfile(&err) << std::endl;
+	checkErr(err);
+	std::cout << "extensions: " << device.getExtensions(&err) << std::endl;
+	checkErr(err);
+	std::cout << "max compute units: " << device.getMaxComputeUnits(&err) << std::endl;
+	checkErr(err);
+	int dim =  device.getMaxWorkItemDimensions(&err);
+	checkErr(err);
 	std::cout << "max work item dimensions: " << dim << std::endl;
+	checkErr(err);
 	std::cout << "max work item sizes: " << std::endl;
-	std::list<size_t> sizes = device.getMaxWorkItemSizes();
+	checkErr(err);
+	std::list<size_t> sizes = device.getMaxWorkItemSizes(&err);
+	checkErr(err);
 	int i = 0;
 	for(std::list<size_t>::iterator itr = sizes.begin(); itr != sizes.end(); ++itr)
 		std::cout << " " << i++ << " - " << *itr << std::endl;
-	std::cout << "max work group size: " << device.getMaxWorkGroupSize() << std::endl;
-	std::cout << "preferred char vector width: " << device.getPreferredVectorWidthChar() << std::endl;
-	std::cout << "preferred short vector width: " << device.getPreferredVectorWidthShort() << std::endl;
-	std::cout << "preferred int vector width: " << device.getPreferredVectorWidthInt() << std::endl;
-	std::cout << "preferred long vector width: " << device.getPreferredVectorWidthLong() << std::endl;
-	std::cout << "preferred float vector width: " << device.getPreferredVectorWidthFloat() << std::endl;
-	std::cout << "preferred double vector width: " << device.getPreferredVectorWidthDouble() << std::endl;
-	std::cout << "max clock frequency: " << device.getMaxClockFrequency() << std::endl;
-	std::cout << "address bits: " << device.getAddressBits() << std::endl;
-	std::cout << "max mem alloc size: " << device.getMaxMemAllocSize() << " bytes" << std::endl;
-	std::cout << "supports images: " << (device.hasImageSupport() ? "yes" : "no") << std::endl;
-	if(device.hasImageSupport()) {
-		std::cout << "max read image args: " << device.getMaxReadImageArgs() << std::endl;
-		std::cout << "max write image args: " << device.getMaxWriteImageArgs() << std::endl;
-		std::cout << "image 2d width: " << device.getImage2DMaxWidth() << std::endl;
-		std::cout << "image 2d height: " << device.getImage2DMaxHeight() << std::endl;
-		std::cout << "image 3d width: " << device.getImage3DMaxWidth() << std::endl;
-		std::cout << "image 3d height: " << device.getImage3DMaxHeight() << std::endl;
-		std::cout << "image 3d depth: " << device.getImage3DMaxDepth() << std::endl;
+	std::cout << "max work group size: " << device.getMaxWorkGroupSize(&err) << std::endl;
+	checkErr(err);
+	std::cout << "preferred char vector width: " << device.getPreferredVectorWidthChar(&err) << std::endl;
+	checkErr(err);
+	std::cout << "preferred short vector width: " << device.getPreferredVectorWidthShort(&err) << std::endl;
+	checkErr(err);
+	std::cout << "preferred int vector width: " << device.getPreferredVectorWidthInt(&err) << std::endl;
+	checkErr(err);
+	std::cout << "preferred long vector width: " << device.getPreferredVectorWidthLong(&err) << std::endl;
+	checkErr(err);
+	std::cout << "preferred float vector width: " << device.getPreferredVectorWidthFloat(&err) << std::endl;
+	checkErr(err);
+	std::cout << "preferred double vector width: " << device.getPreferredVectorWidthDouble(&err) << std::endl;
+	checkErr(err);
+	std::cout << "max clock frequency: " << device.getMaxClockFrequency(&err) << std::endl;
+	checkErr(err);
+	std::cout << "address bits: " << device.getAddressBits(&err) << std::endl;
+	checkErr(err);
+	std::cout << "max mem alloc size: " << device.getMaxMemAllocSize(&err) << " bytes" << std::endl;
+	checkErr(err);
+	std::cout << "supports images: " << (device.hasImageSupport(&err) ? "yes" : "no") << std::endl;
+	checkErr(err);
+	if(device.hasImageSupport(&err)) {
+		std::cout << "max read image args: " << device.getMaxReadImageArgs(&err) << std::endl;
+		checkErr(err);
+		std::cout << "max write image args: " << device.getMaxWriteImageArgs(&err) << std::endl;
+		checkErr(err);
+		std::cout << "image 2d width: " << device.getImage2DMaxWidth(&err) << std::endl;
+		checkErr(err);
+		std::cout << "image 2d height: " << device.getImage2DMaxHeight(&err) << std::endl;
+		checkErr(err);
+		std::cout << "image 3d width: " << device.getImage3DMaxWidth(&err) << std::endl;
+		checkErr(err);
+		std::cout << "image 3d height: " << device.getImage3DMaxHeight(&err) << std::endl;
+		checkErr(err);
+		std::cout << "image 3d depth: " << device.getImage3DMaxDepth(&err) << std::endl;
+		checkErr(err);
 	}
-	std::cout << "max samplers: " << device.getMaxSamplers() << std::endl;
-	std::cout << "max parameter size: " << device.getMaxParameterSize() << " bytes" << std::endl;
-	std::cout << "mem base address align: " << device.getMemBaseAddrAlign() << " bits" << std::endl;
+	std::cout << "max samplers: " << device.getMaxSamplers(&err) << std::endl;
+	checkErr(err);
+	std::cout << "max parameter size: " << device.getMaxParameterSize(&err) << " bytes" << std::endl;
+	checkErr(err);
+	std::cout << "mem base address align: " << device.getMemBaseAddrAlign(&err) << " bits" << std::endl;
+	checkErr(err);
 	std::cout << "single precision FP properties: " << std::endl;
-	cl_device_fp_config fp_config = device.getSingleFPConfig();
+	cl_device_fp_config fp_config = device.getSingleFPConfig(&err);
+	checkErr(err);
 	if(fp_config & CL_FP_DENORM)
 		std::cout << " denorms supported" << std::endl;
 	if(fp_config & CL_FP_INF_NAN)
@@ -747,7 +782,8 @@ void printDeviceInfo(CLDevice device) {
 	if(fp_config & CL_FP_FMA)
 		std::cout << " IEEE754-2008 fused multiply-add is supported" << std::endl;
 	std::cout << "global cache type: ";
-	cl_device_mem_cache_type cache_type = device.getGlobalMemCacheType();
+	cl_device_mem_cache_type cache_type = device.getGlobalMemCacheType(&err);
+	checkErr(err);
 	switch(cache_type) {
 		case CL_NONE:
 			std::cout << "none" << std::endl;
@@ -760,13 +796,19 @@ void printDeviceInfo(CLDevice device) {
 			break;
 	}
 	if(cache_type != CL_NONE) {
-		 std::cout << "global cacheline size: " << device.getGlobalMemCacheLineSize() << " bytes" << std::endl;
-		 std::cout << "global cache size: " << device.getGlobalMemCacheSize() << " bytes" << std::endl;
+		 std::cout << "global cacheline size: " << device.getGlobalMemCacheLineSize(&err) << " bytes" << std::endl;
+		 checkErr(err);
+		 std::cout << "global cache size: " << device.getGlobalMemCacheSize(&err) << " bytes" << std::endl;
+		 checkErr(err);
 	}
-	std::cout << "global memory size: " << device.getGlobalMemSize() << " bytes" << std::endl;
-	std::cout << "max constant buffer size: " << device.getMaxConstantBufferSize() << " bytes" << std::endl;
-	std::cout << "max constant args: " << device.getMaxConstantArgs() << std::endl;
-	cl_device_local_mem_type local_mem_type = device.getLocalMemType();
+	std::cout << "global memory size: " << device.getGlobalMemSize(&err) << " bytes" << std::endl;
+	checkErr(err);
+	std::cout << "max constant buffer size: " << device.getMaxConstantBufferSize(&err) << " bytes" << std::endl;
+	checkErr(err);
+	std::cout << "max constant args: " << device.getMaxConstantArgs(&err) << std::endl;
+	checkErr(err);
+	cl_device_local_mem_type local_mem_type = device.getLocalMemType(&err);
+	checkErr(err);
 	std::cout << "local mem type: ";
 	switch(local_mem_type) {
 		case CL_LOCAL:
@@ -776,19 +818,26 @@ void printDeviceInfo(CLDevice device) {
 			std::cout << "global" << std::endl;
 			break;
 	}
-	std::cout << "local mem size: " << device.getLocalMemSize() << " bytes" << std::endl;
-	std::cout << "supports error correction: " << (device.hasErrorCorrectionSupport() ? "yes" : "no") << std::endl;
-	std::cout << "profiling timer resolution: " << device.getType() << " ns" << std::endl;
-	std::cout << "little endian: " << (device.isLittleEndian() ? "yes" : "no") << std::endl;
-	std::cout << "compiler available: " << (device.hasCompiler() ? "yes" : "no") << std::endl;
+	std::cout << "local mem size: " << device.getLocalMemSize(&err) << " bytes" << std::endl;
+	checkErr(err);
+	std::cout << "supports error correction: " << (device.hasErrorCorrectionSupport(&err) ? "yes" : "no") << std::endl;
+	checkErr(err);
+	std::cout << "profiling timer resolution: " << device.getType(&err) << " ns" << std::endl;
+	checkErr(err);
+	std::cout << "little endian: " << (device.isLittleEndian(&err) ? "yes" : "no") << std::endl;
+	checkErr(err);
+	std::cout << "compiler available: " << (device.hasCompiler(&err) ? "yes" : "no") << std::endl;
+	checkErr(err);
 	std::cout << "execution capabilities: " << std::endl;
-	cl_device_exec_capabilities exec_cap = device.getExecutionCapabilities();
+	cl_device_exec_capabilities exec_cap = device.getExecutionCapabilities(&err);
+	checkErr(err);
 	if(exec_cap & CL_EXEC_KERNEL)
 		std::cout << " can execute OpenCL kernels" << std::endl;
 	if(exec_cap & CL_EXEC_NATIVE_KERNEL) 
 		std::cout << " can execute native kernels" << std::endl;
 	std::cout << "command queue properties: " << std::endl;
-	cl_command_queue_properties queue_props = device.getQueueProperties();
+	cl_command_queue_properties queue_props = device.getQueueProperties(&err);
+	checkErr(err);
 	if(queue_props & CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE)
 		std::cout << " supports out of order execution";
 	if(queue_props & CL_QUEUE_PROFILING_ENABLE)
