@@ -4,7 +4,7 @@
 template <
 	typename ObjType,
 	typename InfoType, 
-	cl_int (__stdcall *InfoFunc)(ObjType, InfoType, size_t, void*, size_t*) 
+	CL_API_ENTRY cl_int (CL_API_CALL *InfoFunc)(ObjType, InfoType, size_t, void*, size_t*) 
 >
 class CLObjectBase
 {
