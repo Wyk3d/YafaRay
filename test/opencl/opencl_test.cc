@@ -1,14 +1,8 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
-
-#include <CL/cl.h>
-
-#include <string>
-#include <sstream>
-#include <list>
-
-#define CL_SRC(a) #a
+#include <time.h>
+#include "cl_wrapper.h"
 
 const char *kernel_source = CL_SRC(
   __kernel void vectorAdd(int n,
@@ -40,647 +34,15 @@ const char *kernel_source = CL_SRC(
 
 #include <iostream>
 
-class CLCombinedError;
-
-class CLError
-{
-	protected:
-		cl_int code;
-	public:
-		CLError(cl_int code) : code(code) {}
-		CLError() : code(CL_SUCCESS) {}
-		bool hasSucceeded() const { return code == CL_SUCCESS; }
-		bool hasFailed() const { return code != CL_SUCCESS; }
-
-		bool operator= (cl_int error) {
-			code = error;
-			return hasFailed();
-		}
-
-		CLCombinedError operator || (bool error_condition);
-
-		operator bool () const {
-			return hasFailed();
-		}
-
-		cl_int &getCode() {
-			return code;
-		}
-
-		const char * getString() const {
-			switch(code)
-			{
-			case CL_DEVICE_NOT_FOUND:
-				return "CL_DEVICE_NOT_FOUND";
-			case CL_DEVICE_NOT_AVAILABLE:
-				return "CL_DEVICE_NOT_AVAILABLE";               
-			case CL_COMPILER_NOT_AVAILABLE:
-				return "CL_COMPILER_NOT_AVAILABLE";           
-			case CL_MEM_OBJECT_ALLOCATION_FAILURE:
-				return "CL_MEM_OBJECT_ALLOCATION_FAILURE";      
-			case CL_OUT_OF_RESOURCES:
-				return "CL_OUT_OF_RESOURCES";                    
-			case CL_OUT_OF_HOST_MEMORY:
-				return "CL_OUT_OF_HOST_MEMORY";                 
-			case CL_PROFILING_INFO_NOT_AVAILABLE:
-				return "CL_PROFILING_INFO_NOT_AVAILABLE";        
-			case CL_MEM_COPY_OVERLAP:
-				return "CL_MEM_COPY_OVERLAP";                    
-			case CL_IMAGE_FORMAT_MISMATCH:
-				return "CL_IMAGE_FORMAT_MISMATCH";               
-			case CL_IMAGE_FORMAT_NOT_SUPPORTED:
-				return "CL_IMAGE_FORMAT_NOT_SUPPORTED";         
-			case CL_BUILD_PROGRAM_FAILURE:
-				return "CL_BUILD_PROGRAM_FAILURE";              
-			case CL_MAP_FAILURE:
-				return "CL_MAP_FAILURE";                         
-			case CL_INVALID_VALUE:
-				return "CL_INVALID_VALUE";                      
-			case CL_INVALID_DEVICE_TYPE:
-				return "CL_INVALID_DEVICE_TYPE";               
-			case CL_INVALID_PLATFORM:
-				return "CL_INVALID_PLATFORM";                   
-			case CL_INVALID_DEVICE:
-				return "CL_INVALID_DEVICE";                    
-			case CL_INVALID_CONTEXT:
-				return "CL_INVALID_CONTEXT";                    
-			case CL_INVALID_QUEUE_PROPERTIES:
-				return "CL_INVALID_QUEUE_PROPERTIES";           
-			case CL_INVALID_COMMAND_QUEUE:
-				return "CL_INVALID_COMMAND_QUEUE";              
-			case CL_INVALID_HOST_PTR:
-				return "CL_INVALID_HOST_PTR";                   
-			case CL_INVALID_MEM_OBJECT:
-				return "CL_INVALID_MEM_OBJECT";                  
-			case CL_INVALID_IMAGE_FORMAT_DESCRIPTOR:
-				return "CL_INVALID_IMAGE_FORMAT_DESCRIPTOR";    
-			case CL_INVALID_IMAGE_SIZE:
-				return "CL_INVALID_IMAGE_SIZE";                 
-			case CL_INVALID_SAMPLER:
-				return "CL_INVALID_SAMPLER";                    
-			case CL_INVALID_BINARY:
-				return "CL_INVALID_BINARY";                     
-			case CL_INVALID_BUILD_OPTIONS:
-				return "CL_INVALID_BUILD_OPTIONS";              
-			case CL_INVALID_PROGRAM:
-				return "CL_INVALID_PROGRAM";                    
-			case CL_INVALID_PROGRAM_EXECUTABLE:
-				return "CL_INVALID_PROGRAM_EXECUTABLE";          
-			case CL_INVALID_KERNEL_NAME:
-				return "CL_INVALID_KERNEL_NAME";                
-			case CL_INVALID_KERNEL_DEFINITION:
-				return "CL_INVALID_KERNEL_DEFINITION";          
-			case CL_INVALID_KERNEL:
-				return "CL_INVALID_KERNEL";                     
-			case CL_INVALID_ARG_INDEX:
-				return "CL_INVALID_ARG_INDEX";                   
-			case CL_INVALID_ARG_VALUE:
-				return "CL_INVALID_ARG_VALUE";                   
-			case CL_INVALID_ARG_SIZE:
-				return "CL_INVALID_ARG_SIZE";                    
-			case CL_INVALID_KERNEL_ARGS:
-				return "CL_INVALID_KERNEL_ARGS";                
-			case CL_INVALID_WORK_DIMENSION:
-				return "CL_INVALID_WORK_DIMENSION";              
-			case CL_INVALID_WORK_GROUP_SIZE:
-				return "CL_INVALID_WORK_GROUP_SIZE";             
-			case CL_INVALID_WORK_ITEM_SIZE:
-				return "CL_INVALID_WORK_ITEM_SIZE";             
-			case CL_INVALID_GLOBAL_OFFSET:
-				return "CL_INVALID_GLOBAL_OFFSET";              
-			case CL_INVALID_EVENT_WAIT_LIST:
-				return "CL_INVALID_EVENT_WAIT_LIST";             
-			case CL_INVALID_EVENT:
-				return "CL_INVALID_EVENT";                      
-			case CL_INVALID_OPERATION:
-				return "CL_INVALID_OPERATION";                 
-			case CL_INVALID_GL_OBJECT:
-				return "CL_INVALID_GL_OBJECT";                  
-			case CL_INVALID_BUFFER_SIZE:
-				return "CL_INVALID_BUFFER_SIZE";                 
-			case CL_INVALID_MIP_LEVEL:
-				return "CL_INVALID_MIP_LEVEL";                   
-			case CL_INVALID_GLOBAL_WORK_SIZE:
-				return "CL_INVALID_GLOBAL_WORK_SIZE";            
-			default:
-				return "unknown error code";
-			}
-
-			return "unknown error code";
-		}
-};
-
-class CLCombinedError : public CLError
-{
-private:
-	bool success;
-public:
-	CLCombinedError(bool success, CLError err) : CLError(err), success(success) {
-		
-	}
-
-	CLCombinedError(CLError err) : CLError(err), success(true) {
-
-	}
-
-	bool isCombinedSuccess() const {
-		return success && CLError::hasSucceeded();
-	}
-};
-
-CLCombinedError CLError::operator||(bool error_condition)
-{
-	if(error_condition) {
-		return CLCombinedError(!error_condition, *this);
-	} else
-		return *this;
-}
-
-class CLErrGuard : public CLError
-{
-protected:
-	CLError *ret_err;
-public:
-	CLErrGuard(CLError *err) {
-		ret_err = err;
-	}
-
-	~CLErrGuard() {
-		if(ret_err)
-			*ret_err = code;
-	}
-
-	bool operator =(cl_int err) {
-		return CLError::operator =(err);
-	}
-};
-
-class CLPlatform;
-
-class CLDevice
-{
-	private:
-		cl_device_id id;
-		CLDevice(cl_device_id id) : id(id) {
-
-		}
-	public:
-		friend class CLContext;
-		friend class CLPlatform;
-
-		cl_device_id getId() {
-			return id;
-		}
-
-		cl_device_type getType(CLError *error = NULL) {
-			return getInfo<cl_device_type>(CL_DEVICE_TYPE, error);
-		}
-
-		cl_uint getVendorId(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_VENDOR_ID, error);
-		}
-
-		cl_uint getMaxComputeUnits(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_MAX_COMPUTE_UNITS, error);
-		}
-
-		cl_uint getMaxWorkItemDimensions(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS, error);
-		}
-
-		std::list<size_t> getMaxWorkItemSizes(CLError *error = NULL) {
-			return getListInfo<size_t>(CL_DEVICE_MAX_WORK_ITEM_SIZES, error);
-		}
-
-		size_t getMaxWorkGroupSize(CLError *error = NULL) {
-			return getInfo<size_t>(CL_DEVICE_MAX_WORK_GROUP_SIZE, error);
-		}
-
-		cl_uint getPreferredVectorWidthChar(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_PREFERRED_VECTOR_WIDTH_CHAR, error);
-		}
-
-		cl_uint getPreferredVectorWidthShort(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_PREFERRED_VECTOR_WIDTH_SHORT, error);
-		}
-
-		cl_uint getPreferredVectorWidthInt(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_PREFERRED_VECTOR_WIDTH_INT, error);
-		}
-
-		cl_uint getPreferredVectorWidthLong(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG, error);
-		}
-
-		cl_uint getPreferredVectorWidthFloat(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT, error);
-		}
-
-		cl_uint getPreferredVectorWidthDouble(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE, error);
-		}
-
-		cl_uint getMaxClockFrequency(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_MAX_CLOCK_FREQUENCY, error);
-		}
-
-		cl_uint getAddressBits(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_ADDRESS_BITS, error);
-		}
-
-		cl_ulong getMaxMemAllocSize(CLError *error = NULL) {
-			return getInfo<cl_ulong>(CL_DEVICE_MAX_MEM_ALLOC_SIZE, error);
-		}
-
-		cl_bool hasImageSupport(CLError *error = NULL) {
-			return getInfo<cl_bool>(CL_DEVICE_IMAGE_SUPPORT, error);
-		}
-
-		cl_uint getMaxReadImageArgs(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_MAX_READ_IMAGE_ARGS, error);
-		}
-
-
-		cl_uint getMaxWriteImageArgs(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_MAX_WRITE_IMAGE_ARGS, error);
-		}
-
-
-		size_t getImage2DMaxWidth(CLError *error = NULL) {
-			return getInfo<size_t>(CL_DEVICE_IMAGE2D_MAX_WIDTH, error);
-		}
-
-		size_t getImage2DMaxHeight(CLError *error = NULL) {
-			return getInfo<size_t>(CL_DEVICE_IMAGE2D_MAX_HEIGHT, error);
-		}
-
-		size_t getImage3DMaxWidth(CLError *error = NULL) {
-			return getInfo<size_t>(CL_DEVICE_IMAGE3D_MAX_WIDTH, error);
-		}
-
-		size_t getImage3DMaxHeight(CLError *error = NULL) {
-			return getInfo<size_t>(CL_DEVICE_IMAGE3D_MAX_HEIGHT, error);
-		}
-
-		size_t getImage3DMaxDepth(CLError *error = NULL) {
-			return getInfo<size_t>(CL_DEVICE_IMAGE3D_MAX_DEPTH, error);
-		}
-
-		cl_uint getMaxSamplers(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_MAX_SAMPLERS, error);
-		}
-
-		size_t getMaxParameterSize(CLError *error = NULL) {
-			return getInfo<size_t>(CL_DEVICE_MAX_PARAMETER_SIZE, error);
-		}
-
-		cl_uint getMemBaseAddrAlign(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_MEM_BASE_ADDR_ALIGN, error);
-		}
-
-		cl_uint getMinDataTypeAlignSize(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_MIN_DATA_TYPE_ALIGN_SIZE, error);
-		}
-
-		cl_device_fp_config getSingleFPConfig(CLError *error = NULL) {
-			return getInfo<cl_device_fp_config>(CL_DEVICE_SINGLE_FP_CONFIG, error);
-		}
-
-		cl_device_mem_cache_type getGlobalMemCacheType(CLError *error = NULL) {
-			return getInfo<cl_device_mem_cache_type>(CL_DEVICE_GLOBAL_MEM_CACHE_TYPE, error);
-		}
-
-		cl_uint getGlobalMemCacheLineSize(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_GLOBAL_MEM_CACHELINE_SIZE, error);
-		}
-
-		cl_ulong getGlobalMemCacheSize(CLError *error = NULL) {
-			return getInfo<cl_ulong>(CL_DEVICE_GLOBAL_MEM_CACHE_SIZE, error);
-		}
-
-		cl_ulong getGlobalMemSize(CLError *error = NULL) {
-			return getInfo<cl_ulong>(CL_DEVICE_GLOBAL_MEM_SIZE, error);
-		}
-
-		cl_ulong getMaxConstantBufferSize(CLError *error = NULL) {
-			return getInfo<cl_ulong>(CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, error);
-		}
-
-		cl_uint getMaxConstantArgs(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_MAX_CONSTANT_ARGS, error);
-		}
-
-		cl_device_local_mem_type getLocalMemType(CLError *error = NULL) {
-			return getInfo<cl_device_local_mem_type>(CL_DEVICE_LOCAL_MEM_TYPE, error);
-		}
-
-		cl_ulong getLocalMemSize(CLError *error = NULL) {
-			return getInfo<cl_uint>(CL_DEVICE_LOCAL_MEM_SIZE, error);
-		}
-
-		cl_bool hasErrorCorrectionSupport(CLError *error = NULL) {
-			return getInfo<cl_bool>(CL_DEVICE_ERROR_CORRECTION_SUPPORT, error);
-		}
-
-		size_t getProfilingTimerResolution(CLError *error = NULL) {
-			return getInfo<size_t>(CL_DEVICE_PROFILING_TIMER_RESOLUTION, error);
-		}
-
-		cl_bool isLittleEndian(CLError *error = NULL) {
-			return getInfo<cl_bool>(CL_DEVICE_ENDIAN_LITTLE, error);
-		}
-
-		cl_uint hasCompiler(CLError *error = NULL) {
-			return getInfo<cl_bool>(CL_DEVICE_COMPILER_AVAILABLE, error);
-		}
-
-		cl_device_exec_capabilities getExecutionCapabilities (CLError *error = NULL) {
-			return getInfo<cl_device_exec_capabilities>(CL_DEVICE_EXECUTION_CAPABILITIES, error);
-		}
-
-		cl_command_queue_properties getQueueProperties(CLError *error = NULL) {
-			return getInfo<cl_command_queue_properties>(CL_DEVICE_QUEUE_PROPERTIES, error);
-		}
-
-		CLPlatform getPlatform(CLError *error = NULL);
-
-		std::string getName(CLError *error = NULL) {
-			return getStringInfo(CL_DEVICE_NAME, error);
-		}
-
-		std::string getVendor(CLError *error = NULL) {
-			return getStringInfo(CL_DEVICE_VENDOR, error);
-		}
-
-		std::string getDriverVersion(CLError *error = NULL) {
-			return getStringInfo(CL_DRIVER_VERSION, error);
-		}
-
-		std::string getProfile(CLError *error = NULL) {
-			return getStringInfo(CL_DEVICE_PROFILE, error);
-		}
-
-		std::string getVersion(CLError *error = NULL) {
-			return getStringInfo(CL_DEVICE_VERSION, error);
-		}
-
-		std::string getExtensions(CLError *error = NULL) {
-			return getStringInfo(CL_DEVICE_EXTENSIONS, error);
-		}
-
-		template<typename T>
-		T getInfo(cl_device_info info, CLError *error = NULL) {
-			CLErrGuard err(error);
-			T ret = 0;
-
-			// get the size of the info string
-			size_t size;
-			if((err = clGetDeviceInfo(id,
-				info,
-				0,
-				NULL,
-				&size)) || sizeof(T) != size)
-				return ret;
-
-			// get the info string
-
-			if(err = clGetDeviceInfo(id,
-				info,
-				size,
-				&ret,
-				NULL)) 
-				return ret;
-
-			return ret;
-		}
-
-		std::string getStringInfo(cl_device_info info, CLError *error) {
-			CLErrGuard err(error);
-
-			// get the size of the info string
-			size_t size;
-			if(err = clGetDeviceInfo(id,
-				info,
-				0,
-				NULL,
-				&size)) 
-				return "";
-
-			// get the info string
-			char *pbuf = new char[size];
-			if(err = clGetDeviceInfo(id,
-				info,
-				size,
-				pbuf,
-				NULL)) 
-			{
-				delete[] pbuf;
-				return "";
-			}
-
-			return pbuf;
-		}
-
-		template<typename T>
-		std::list<T> getListInfo(cl_device_info info, CLError *error) {
-			CLErrGuard err(error);
-			std::list<T> ilist;
-
-			// get the size of the info list
-			size_t size;
-			if(err = clGetDeviceInfo(id,
-				info,
-				0,
-				NULL,
-				&size)) 
-				return ilist;
-
-			// get the info list
-			T *info_buf = new T[size/sizeof(T)];
-			if(err = clGetDeviceInfo(id,
-				info,
-				size,
-				info_buf,
-				NULL)) 
-			{
-				delete[] info_buf;
-				return ilist;
-			}
-
-			for(int i = 0; i < size / sizeof(T); ++i)
-				ilist.push_back(info_buf[i]);
-
-			return ilist;
-		}
-};
-
-class CLContext
-{
-	private:
-		cl_context id;
-		CLContext(cl_context id) : id(id) {
-
-		}
-
-		friend class CLPlatform;
-	public:
-		cl_context getId() {
-			return id;
-		}
-
-		std::list<CLDevice> getDevices(CLError *error) {
-			CLErrGuard err(error);
-			std::list<CLDevice> dlist;
-
-			// get the number of devices
-			size_t size;
-			if(err = clGetContextInfo(id, CL_CONTEXT_DEVICES, 0, 0, &size))
-				return dlist;
-			
-			// get the devices 
-			cl_device_id* devices = new cl_device_id[size/sizeof(cl_device_id)];
-			if(err = clGetContextInfo(id, CL_CONTEXT_DEVICES, size, devices, 0)) {
-				delete[] devices;
-				return dlist;
-			}
-
-			// add the devices to the list
-			for(int i = 0; i < size / sizeof(cl_device_id); ++i)
-				dlist.push_back(devices[i]);
-
-			return dlist;
-		}
-};
-
-class CLPlatform
-{
-private:
-	cl_platform_id id;
-	CLPlatform(cl_platform_id id) : id(id) {
-
-	}
-
-public:
-	std::string getProfile(CLError *error = NULL) {
-		return getStringInfo(CL_PLATFORM_PROFILE, error);
-	}
-
-	std::string getVersion(CLError *error = NULL) {
-		return getStringInfo(CL_PLATFORM_VERSION, error);
-	}
-
-	std::string getVendor(CLError *error = NULL) {
-		return getStringInfo(CL_PLATFORM_VENDOR, error);
-	}
-
-	std::string getName(CLError *error = NULL) {
-		return getStringInfo(CL_PLATFORM_NAME, error);
-	}
-
-	std::string getExtensions(CLError *error = NULL) {
-		return getStringInfo(CL_PLATFORM_EXTENSIONS, error);
-	}
-
-	std::string getStringInfo(cl_platform_info info, CLError *error = NULL) {
-		CLErrGuard err(error);
-
-		// get the size of the info string
-		size_t size;
-		if(err = clGetPlatformInfo(id,
-			info,
-			0,
-			NULL,
-			&size)) 
-			return "";
-
-		// get the info string
-		char *pbuf = new char[size];
-		if(err = clGetPlatformInfo(id,
-			info,
-			size,
-			pbuf,
-			NULL)) 
-		{
-			delete[] pbuf;
-			return "";
-		}
-
-		return pbuf;
-	}
-
-	CLContext *createContext(cl_device_type device_type, CLError *error = NULL) {
-		CLErrGuard err(error);
-
-		cl_context_properties cps[3] = 
-		{
-			CL_CONTEXT_PLATFORM, 
-			(cl_context_properties)id, 
-			0
-		};
-
-		cl_context context = clCreateContextFromType(cps,
-			device_type,
-			NULL,
-			NULL,
-			&err.getCode());
-
-		return err ? NULL : new CLContext(context);
-	}
-
-	cl_platform_id getId() {
-		return id;
-	}
-
-public:
-	friend class CLMain;
-	friend class CLDevice;
-};
-
-CLPlatform CLDevice::getPlatform(CLError *error)
-{
-	return getInfo<cl_platform_id>(CL_DEVICE_PLATFORM, error);
-}
-
-class CLMain
-{
-public:
-
-	std::list<CLPlatform> getPlatforms(CLError *error = NULL)
-	{
-		CLErrGuard err(error);
-		std::list<CLPlatform> plist;
-
-		// find the number of platforms
-		cl_uint numPlatforms;
-		if(err = clGetPlatformIDs(0, NULL, &numPlatforms))
-			return plist;
-
-		// read all the platform ids into an array
-		cl_platform_id* platforms = new cl_platform_id[numPlatforms];
-		if(err = clGetPlatformIDs(numPlatforms, platforms, NULL)) {
-			delete[] platforms;
-			return plist;
-		}
-
-		// add the ids from the array into the list
-		for(cl_uint i = 0; i < numPlatforms; i++)
-			plist.push_back(platforms[i]);
-
-		delete[] platforms;
-		return plist;
-	}
-};
-
-
 inline void
-checkErr(CLCombinedError err, const char * message = "")
+checkErr(CLCombinedError err, const char * message = "", bool fatal = true)
 {
 	if (!err.isCombinedSuccess()) {
 		std::cerr << "ERROR: " << message;
 		if(err.hasFailed())
 			std::cerr << " " << err.getString() << " (" << err.getCode() << ")";
 		std::cerr << std::endl;
-		exit(EXIT_FAILURE);
+		if(fatal) exit(EXIT_FAILURE);
 	}
 }
 
@@ -876,37 +238,54 @@ main(void)
 		for(std::list<CLPlatform>::iterator itr = platforms.begin(); itr != platforms.end(); ++itr)
 			printPlatformInfo(*itr);
 
-		CLContext* context = platform.createContext(CL_DEVICE_TYPE_CPU, &err);
-		checkErr(err || context == NULL, "failed to get a context for the chosen device\n");
-
-		std::list<CLDevice> devices = context->getDevices(&err);
-		checkErr(err || devices.empty(), "failed to find devices for context");
+		std::list<CLDevice> devices = platform.getDevices(&err);
+		checkErr(err || devices.empty(), "failed to find devices for the chosen platform");
 		CLDevice device = *devices.begin();
 
-		for(std::list<CLDevice>::iterator itr = devices.begin(); itr != devices.end(); ++itr)
+		for(std::list<CLDevice>::iterator itr = devices.begin(); itr != devices.end(); ++itr) {
+			// if there are is more than one device to choose from, override with a GPU
+			if(itr->getType() == CL_DEVICE_TYPE_GPU)
+				device = *itr;
 			printDeviceInfo(*itr);
+		}
 
-		
-		cl_context cid = context->getId();
-		cl_device_id did = device.getId();
-        
-        cl_command_queue queue = clCreateCommandQueue(cid, did, 0, &error);
-        assert(error == CL_SUCCESS);
+		CLContext* context;
+		context = platform.createContext(device, &err);
+		checkErr(err || context == NULL, "failed to get a context for the chosen device\n");
 
-        cl_mem ad = clCreateBuffer(cid, CL_MEM_READ_ONLY, n * sizeof(cl_float), 0, &error);
-        assert(error == CL_SUCCESS);
-        cl_mem bd = clCreateBuffer(cid, CL_MEM_READ_ONLY, n * sizeof(cl_float), 0, &error);
-        assert(error == CL_SUCCESS);
-        cl_mem cd = clCreateBuffer(cid, CL_MEM_READ_ONLY, n * sizeof(cl_float), 0, &error);
-        assert(error == CL_SUCCESS);
-       
-        size = strlen(kernel_source);
-        cl_program program = clCreateProgramWithSource(cid, 1, &kernel_source, &size, &error);
-        assert(error == CL_SUCCESS);
-        error = clBuildProgram(program, 0, 0, 0, 0, 0);
-        assert(error == CL_SUCCESS);
+		CLCommandQueue *queue = context->createCommandQueue(device, &err);
+		checkErr(err || queue == NULL, "failed to create command queue");
+
+		CLBuffer *buf_a = context->createBuffer(CL_MEM_READ_ONLY, n * sizeof(cl_float), NULL, &err);
+		checkErr(err || buf_a == NULL, "failed to create buffer");
+		CLBuffer *buf_b = context->createBuffer(CL_MEM_READ_ONLY, n * sizeof(cl_float), NULL, &err);
+		checkErr(err || buf_b == NULL, "failed to create buffer");
+		CLBuffer *buf_c = context->createBuffer(CL_MEM_READ_ONLY, n * sizeof(cl_float), NULL, &err);
+		checkErr(err || buf_c == NULL, "failed to create buffer");
         
-        cl_kernel kernel = clCreateKernel(program, "vectorAdd", &error);
+		CLProgram *program = context->createProgram(kernel_source, &err);
+		checkErr(err || program == NULL, "failed to create program");
+        
+		std::cout << "building kernel ...";
+		CLError build_error;
+
+		clock_t start = clock();
+		program->build(&build_error);
+		clock_t end = clock();
+		std::cout << "[" << (float)(end-start)/(float)CLK_TCK << "s]: ";
+
+		std::string log = program->getBuildLog(device, &err);
+
+		if(build_error) std::cout << "FAILED: " << build_error.getString() << " (" 
+			<< build_error.getCode() << ")" << std::endl;
+		else std::cout << "SUCCESS." << std::endl;
+
+		checkErr(err, "failed to get build log");
+		if(log != "") std::cout << log << std::endl;
+		if(build_error)
+			exit(EXIT_FAILURE);
+        
+        /*cl_kernel kernel = clCreateKernel(program, "vectorAdd", &error);
         assert(error == CL_SUCCESS);
 
         error = clSetKernelArg(kernel, 0, sizeof(cl_int), (void*) &n);
@@ -951,5 +330,10 @@ main(void)
         error = clReleaseCommandQueue(queue);
         assert(error == CL_SUCCESS);
         error = clReleaseContext(cid);
-        assert(error == CL_SUCCESS);
+        assert(error == CL_SUCCESS);*/
+
+		delete buf_c;
+		delete buf_b;
+		delete buf_a;
+		delete context;
 }
