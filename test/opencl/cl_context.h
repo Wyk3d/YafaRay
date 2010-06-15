@@ -1,19 +1,26 @@
 #ifndef _CL_CONTEXT_H
 #define _CL_CONTEXT_H
 
-class CLContext
+class CLContext :
+	public
+		CLObjectReleasableInfoBase <  
+			cl_context,
+			&clReleaseContext,
+			cl_context_info,
+			&clGetContextInfo
+		>
 {
 private:
-	cl_context id;
-	CLContext(cl_context id) : id(id) {
+	CLContext(cl_context id) : CLObjectReleasableInfoBase(id) {
+
+	}
+
+	~CLContext() {
 
 	}
 
 	friend class CLPlatform;
 public:
-	cl_context getId() {
-		return id;
-	}
 
 	std::list<CLDevice> getDevices(CLError *error) {
 		CLErrGuard err(error);
@@ -60,8 +67,6 @@ public:
 
 		return err ? NULL : new CLProgram(program);
 	}
-
-
 };
 
 #endif //_CL_CONTEXT_H

@@ -7,6 +7,10 @@ private:
 	CLBuffer(cl_mem mem) : CLMem(mem) {
 
 	}
+
+	~CLBuffer() {
+
+	}
 public:
 	friend class CLContext;
 };

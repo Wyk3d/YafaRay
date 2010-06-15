@@ -242,7 +242,7 @@ main(void)
 		checkErr(err || devices.empty(), "failed to find devices for the chosen platform");
 		CLDevice device = *devices.begin();
 
-		for(std::list<CLDevice>::iterator itr = devices.begin(); itr != devices.end(); ++itr) {
+		  for(std::list<CLDevice>::iterator itr = devices.begin(); itr != devices.end(); ++itr) {
 			// if there are is more than one device to choose from, override with a GPU
 			if(itr->getType() == CL_DEVICE_TYPE_GPU)
 				device = *itr;
@@ -266,7 +266,7 @@ main(void)
 		CLProgram *program = context->createProgram(kernel_source, &err);
 		checkErr(err || program == NULL, "failed to create program");
         
-		std::cout << "building kernel ...";
+		std::cout << "building program ...";
 		CLError build_error;
 
 		clock_t start = clock();
@@ -284,11 +284,11 @@ main(void)
 		if(log != "") std::cout << log << std::endl;
 		if(build_error)
 			exit(EXIT_FAILURE);
-        
-        /*cl_kernel kernel = clCreateKernel(program, "vectorAdd", &error);
-        assert(error == CL_SUCCESS);
 
-        error = clSetKernelArg(kernel, 0, sizeof(cl_int), (void*) &n);
+		CLKernel *kernel = program->createKernel("vectorAdd", &err);
+		checkErr(err || !kernel, "failed to create kernel");
+
+        /*error = clSetKernelArg(kernel, 0, sizeof(cl_int), (void*) &n);
         assert(error == CL_SUCCESS);
         error = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void*) &ad);
         assert(error == CL_SUCCESS);
@@ -332,8 +332,14 @@ main(void)
         error = clReleaseContext(cid);
         assert(error == CL_SUCCESS);*/
 
-		delete buf_c;
-		delete buf_b;
-		delete buf_a;
-		delete context;
+		kernel->free(&err);
+		checkErr(err, "failed to release kernel");
+		buf_c->free(&err);
+		checkErr(err, "failed to release buffer c");
+		buf_b->free(&err);
+		checkErr(err, "failed to release buffer b");
+		buf_a->free(&err);
+		checkErr(err, "failed to release buffer a");
+		context->free(&err);
+		checkErr(err, "failed to release context");
 }

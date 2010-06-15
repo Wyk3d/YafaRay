@@ -1,11 +1,16 @@
 #ifndef _CL_PLATFORM_H
 #define _CL_PLATFORM_H
 
-class CLPlatform
+class CLPlatform :
+	public 
+		CLObjectInfoBase < 
+			cl_platform_id,
+			cl_platform_info, 
+			&clGetPlatformInfo
+		>
 {
 private:
-	cl_platform_id id;
-	CLPlatform(cl_platform_id id) : id(id) {
+	CLPlatform(cl_platform_id id) : CLObjectInfoBase(id) {
 
 	}
 
@@ -28,33 +33,6 @@ public:
 
 	std::string getExtensions(CLError *error = NULL) {
 		return getStringInfo(CL_PLATFORM_EXTENSIONS, error);
-	}
-
-	std::string getStringInfo(cl_platform_info info, CLError *error = NULL) {
-		CLErrGuard err(error);
-
-		// get the size of the info string
-		size_t size;
-		if(err = clGetPlatformInfo(id,
-			info,
-			0,
-			NULL,
-			&size)) 
-			return "";
-
-		// get the info string
-		char *pbuf = new char[size];
-		if(err = clGetPlatformInfo(id,
-			info,
-			size,
-			pbuf,
-			NULL)) 
-		{
-			delete[] pbuf;
-			return "";
-		}
-
-		return pbuf;
 	}
 
 	std::list<CLDevice> getDevices(CLError *error) {

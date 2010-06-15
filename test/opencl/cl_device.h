@@ -2,10 +2,15 @@
 #define _CL_DEVICE_H
 
 class CLDevice :
-	public CLObjectBase< cl_device_id, cl_device_info, &clGetDeviceInfo >
+	public
+		CLObjectInfoBase <
+			cl_device_id,
+			cl_device_info,
+			&clGetDeviceInfo
+		>
 {
 private:
-	CLDevice(cl_device_id id) : CLObjectBase(id) {
+	CLDevice(cl_device_id id) : CLObjectInfoBase(id) {
 
 	}
 public:

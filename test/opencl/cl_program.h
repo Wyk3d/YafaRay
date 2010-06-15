@@ -2,10 +2,20 @@
 #define _CL_PROGRAM_H
 
 class CLProgram :
-	public CLObjectBase< cl_program, cl_program_info, &clGetProgramInfo >
+	public 
+		CLObjectReleasableInfoBase < 
+			cl_program,
+			&clReleaseProgram,
+			cl_program_info,
+			&clGetProgramInfo 
+		>
 {
 protected:
-	CLProgram(cl_program id) : CLObjectBase(id) {
+	CLProgram(cl_program id) : CLObjectReleasableInfoBase(id) {
+
+	}
+
+	~CLProgram() {
 
 	}
 public:
@@ -15,6 +25,12 @@ public:
 		CLErrGuard err(error);
 		char *options = NULL;
 		err = clBuildProgram(id, 0, NULL, options, NULL, NULL);
+	}
+
+	CLKernel* createKernel(const char *kernel_name, CLError *error) {
+		CLErrGuard err(error);
+		cl_kernel kernel = clCreateKernel(id, kernel_name, &err.getCode());
+		return new CLKernel(kernel);
 	}
 
 	std::string getBuildLog(CLDevice device, CLError *error = NULL) {
