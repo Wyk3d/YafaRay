@@ -124,7 +124,7 @@ class CLObjectInfoBase :
 	private:
 		CLInfoTraits< ObjType, InfoType, InfoFunc> infoTraits;
 	protected:
-		CLObjectInfoBase(ObjType id) : CLObjectBase(id) {
+		CLObjectInfoBase(ObjType id) : CLObjectBase<ObjType>(id) {
 
 		}
 	public:
@@ -134,12 +134,12 @@ class CLObjectInfoBase :
 		}
 
 		std::string getStringInfo(InfoType info, CLError *error) {
-			return infoTraits.getStringInfo(id, info, error);
+			return infoTraits.getStringInfo(this->id, info, error);
 		}
 
 		template<typename T>
 		std::list<T> getListInfo(InfoType info, CLError *error) {
-			return infoTraits.getListInfo<T>(id, info, error);
+			return infoTraits.getListInfo<T>(this->id, info, error);
 		}
 };
 
@@ -153,19 +153,19 @@ class CLObjectReleasableInfoBase :
 	public CLObjectInfoBase< ObjType, InfoType, InfoFunc >
 {
 	protected:
-		CLObjectReleasableInfoBase(ObjType id) : CLObjectInfoBase(id) {
-
+		CLObjectReleasableInfoBase(ObjType id) : 
+			 CLObjectInfoBase< ObjType, InfoType, InfoFunc >(id) {
 		}
 
 		~CLObjectReleasableInfoBase() {
-			assert(id == NULL);
+			assert(this->id == NULL);
 		}
 	public:
 		void free(CLError *error = NULL) {
 			CLErrGuard err(error);
 
-			if(!(err = ReleaseFunc(id)) || error == NULL) {
-				id = NULL;
+			if(!(err = ReleaseFunc(this->id)) || error == NULL) {
+				this->id = NULL;
 				delete this;
 			}
 		}

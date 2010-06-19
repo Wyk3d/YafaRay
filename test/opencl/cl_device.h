@@ -1,16 +1,17 @@
 #ifndef _CL_DEVICE_H
 #define _CL_DEVICE_H
 
+typedef CLObjectInfoBase <
+	cl_device_id,
+	cl_device_info,
+	&clGetDeviceInfo
+> CLDeviceBase;
+
 class CLDevice :
-	public
-		CLObjectInfoBase <
-			cl_device_id,
-			cl_device_info,
-			&clGetDeviceInfo
-		>
+	public CLDeviceBase
 {
 private:
-	CLDevice(cl_device_id id) : CLObjectInfoBase(id) {
+	CLDevice(cl_device_id id) : CLDeviceBase(id) {
 
 	}
 public:

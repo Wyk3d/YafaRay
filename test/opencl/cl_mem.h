@@ -1,17 +1,18 @@
 #ifndef _CL_MEM_H
 #define _CL_MEM_H
 
+typedef	CLObjectReleasableInfoBase <
+	cl_mem,
+	&clReleaseMemObject,
+	cl_mem_info,
+	&clGetMemObjectInfo
+> CLMemBase;
+
 class CLMem :
-	public
-		CLObjectReleasableInfoBase <
-			cl_mem,
-			&clReleaseMemObject,
-			cl_mem_info,
-			&clGetMemObjectInfo
-		>
+	public CLMemBase
 {
 protected:
-	CLMem(cl_mem mem) : CLObjectReleasableInfoBase(mem) {
+	CLMem(cl_mem mem) : CLMemBase(mem) {
 
 	}
 

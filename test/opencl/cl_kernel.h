@@ -1,17 +1,18 @@
 #ifndef _CL_KERNEL_H
 #define _CL_KERNEL_H
 
+typedef CLObjectReleasableInfoBase< 
+	cl_kernel,
+	&clReleaseKernel,
+	cl_kernel_info,
+	&clGetKernelInfo 
+> CLKernelBase;
+
 class CLKernel :
-	public 
-		CLObjectReleasableInfoBase< 
-			cl_kernel,
-			&clReleaseKernel,
-			cl_kernel_info,
-			&clGetKernelInfo 
-		>
+	public CLKernelBase
 {
 	private:
-		CLKernel(cl_kernel id) : CLObjectReleasableInfoBase(id) {
+		CLKernel(cl_kernel id) : CLKernelBase(id) {
 
 		}
 

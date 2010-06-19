@@ -1,17 +1,18 @@
 #ifndef _CL_PROGRAM_H
 #define _CL_PROGRAM_H
 
+typedef CLObjectReleasableInfoBase < 
+	cl_program,
+	&clReleaseProgram,
+	cl_program_info,
+	&clGetProgramInfo 
+> CLProgramBase;
+
 class CLProgram :
-	public 
-		CLObjectReleasableInfoBase < 
-			cl_program,
-			&clReleaseProgram,
-			cl_program_info,
-			&clGetProgramInfo 
-		>
+	public CLProgramBase
 {
 protected:
-	CLProgram(cl_program id) : CLObjectReleasableInfoBase(id) {
+	CLProgram(cl_program id) : CLProgramBase(id) {
 
 	}
 

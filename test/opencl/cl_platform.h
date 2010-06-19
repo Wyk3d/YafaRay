@@ -1,16 +1,17 @@
 #ifndef _CL_PLATFORM_H
 #define _CL_PLATFORM_H
 
+typedef CLObjectInfoBase < 
+	cl_platform_id,
+	cl_platform_info, 
+	&clGetPlatformInfo
+> CLPlatformBase;
+
 class CLPlatform :
-	public 
-		CLObjectInfoBase < 
-			cl_platform_id,
-			cl_platform_info, 
-			&clGetPlatformInfo
-		>
+	public CLPlatformBase
 {
 private:
-	CLPlatform(cl_platform_id id) : CLObjectInfoBase(id) {
+	CLPlatform(cl_platform_id id) : CLPlatformBase(id) {
 
 	}
 

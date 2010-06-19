@@ -310,27 +310,14 @@ main(void)
         error = clEnqueueReadBuffer(queue, cd, CL_TRUE, 0, n * sizeof(cl_float), c, 0, 0, 0);
         assert(error == CL_SUCCESS);
 
-        for (int i = 0; i < n; ++i)
-                assert(c[i] == n);
+        error = clReleaseCommandQueue(queue);*/
 
-        delete [] a;
-        delete [] b;
-        delete [] c;
+		for (int i = 0; i < n; ++i)
+			assert(c[i] == n);
 
-        error = clReleaseMemObject(ad);
-        assert(error == CL_SUCCESS);
-        error = clReleaseMemObject(bd);
-        assert(error == CL_SUCCESS);
-        error = clReleaseMemObject(cd);
-        assert(error == CL_SUCCESS);
-        error = clReleaseKernel(kernel);
-        assert(error == CL_SUCCESS);
-        error = clReleaseProgram(program);
-        assert(error == CL_SUCCESS);
-        error = clReleaseCommandQueue(queue);
-        assert(error == CL_SUCCESS);
-        error = clReleaseContext(cid);
-        assert(error == CL_SUCCESS);*/
+		delete [] a;
+		delete [] b;
+		delete [] c;
 
 		kernel->free(&err);
 		checkErr(err, "failed to release kernel");

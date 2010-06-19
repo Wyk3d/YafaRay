@@ -1,17 +1,18 @@
 #ifndef _CL_CONTEXT_H
 #define _CL_CONTEXT_H
 
+typedef CLObjectReleasableInfoBase <  
+	cl_context,
+	&clReleaseContext,
+	cl_context_info,
+	&clGetContextInfo
+> CLContextBase;
+
 class CLContext :
-	public
-		CLObjectReleasableInfoBase <  
-			cl_context,
-			&clReleaseContext,
-			cl_context_info,
-			&clGetContextInfo
-		>
+	public CLContextBase
 {
 private:
-	CLContext(cl_context id) : CLObjectReleasableInfoBase(id) {
+	CLContext(cl_context id) : CLContextBase(id) {
 
 	}
 
