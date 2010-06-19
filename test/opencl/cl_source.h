@@ -3,4 +3,4 @@
 
 #define CL_SRC(a) #a
 
-#endif _CL_SOURCE_H
+#endif //_CL_SOURCE_H
