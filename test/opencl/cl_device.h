@@ -7,6 +7,8 @@ typedef CLObjectInfoBase <
 	&clGetDeviceInfo
 > CLDeviceBase;
 
+class CLPlatform;
+
 class CLDevice :
 	public CLDeviceBase
 {

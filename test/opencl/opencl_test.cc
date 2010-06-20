@@ -272,7 +272,7 @@ main(void)
 		clock_t start = clock();
 		program->build(&build_error);
 		clock_t end = clock();
-		std::cout << "[" << (float)(end-start)/(float)CLK_TCK << "s]: ";
+		std::cout << "[" << (float)(end-start)/(float)CLOCKS_PER_SEC << "s]: ";
 
 		std::string log = program->getBuildLog(device, &err);
 
@@ -310,10 +310,10 @@ main(void)
         error = clEnqueueReadBuffer(queue, cd, CL_TRUE, 0, n * sizeof(cl_float), c, 0, 0, 0);
         assert(error == CL_SUCCESS);
 
-        error = clReleaseCommandQueue(queue);*/
+        error = clReleaseCommandQueue(queue);
 
 		for (int i = 0; i < n; ++i)
-			assert(c[i] == n);
+			assert(c[i] == n);*/
 
 		delete [] a;
 		delete [] b;
