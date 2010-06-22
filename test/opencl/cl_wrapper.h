@@ -4,8 +4,9 @@
 #include <CL/cl.h>
 
 #include <string>
-#include <sstream>
 #include <list>
+#include <string.h>
+#include <cassert>
 
 #include "cl_error.h"
 #include "cl_base.h"

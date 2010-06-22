@@ -1,9 +1,9 @@
 #ifndef _CL_PLATFORM_H
 #define _CL_PLATFORM_H
 
-typedef CLObjectInfoBase < 
+typedef CLObjectInfoBase <
 	cl_platform_id,
-	cl_platform_info, 
+	cl_platform_info,
 	&clGetPlatformInfo
 > CLPlatformBase;
 
@@ -48,7 +48,7 @@ public:
 		if(err = clGetDeviceIDs(id, CL_DEVICE_TYPE_ALL, num_devices, devices, NULL))
 			return dlist;
 
-		for(int i = 0; i < num_devices; ++i)
+		for(size_t i = 0; i < num_devices; ++i)
 			dlist.push_back(devices[i]);
 
 		return dlist;
@@ -57,10 +57,10 @@ public:
 	CLContext *createContext(cl_device_type device_type, CLError *error = NULL) {
 		CLErrGuard err(error);
 
-		cl_context_properties cps[3] = 
+		cl_context_properties cps[3] =
 		{
-			CL_CONTEXT_PLATFORM, 
-			(cl_context_properties)id, 
+			CL_CONTEXT_PLATFORM,
+			(cl_context_properties)id,
 			0
 		};
 
@@ -76,10 +76,10 @@ public:
 	CLContext *createContext(CLDevice device, CLError *error = NULL) {
 		CLErrGuard err(error);
 
-		cl_context_properties cps[3] = 
+		cl_context_properties cps[3] =
 		{
-			CL_CONTEXT_PLATFORM, 
-			(cl_context_properties)id, 
+			CL_CONTEXT_PLATFORM,
+			(cl_context_properties)id,
 			0
 		};
 		cl_device_id did = device.getId();

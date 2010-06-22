@@ -1,8 +1,8 @@
-#include <cassert>
-#include <cmath>
-#include <cstring>
-#include <time.h>
+#include <yafray_config.h>
+
 #include "cl_wrapper.h"
+#include <time.h>
+#include <stdlib.h>
 
 const char *kernel_source = CL_SRC(
   __kernel void vectorAdd(int n,
@@ -195,7 +195,7 @@ void printDeviceInfo(CLDevice device) {
 	checkErr(err);
 	if(exec_cap & CL_EXEC_KERNEL)
 		std::cout << " can execute OpenCL kernels" << std::endl;
-	if(exec_cap & CL_EXEC_NATIVE_KERNEL) 
+	if(exec_cap & CL_EXEC_NATIVE_KERNEL)
 		std::cout << " can execute native kernels" << std::endl;
 	std::cout << "command queue properties: " << std::endl;
 	cl_command_queue_properties queue_props = device.getQueueProperties(&err);
@@ -213,8 +213,7 @@ main(void)
 {
         //const char* source = kernel_source;
         const int n = N;
-        size_t size;
-        cl_int error = 0;
+
 
         float* a = new float[n];
         for (int i = 0; i < n; ++i)
@@ -225,8 +224,6 @@ main(void)
                 b[i] = n - i;
 
         float* c = new float[n];
-
-        cl_device_type device_type = CL_DEVICE_TYPE_CPU;
 
 		CLMain cl;
 		CLError err;
@@ -262,10 +259,10 @@ main(void)
 		checkErr(err || buf_b == NULL, "failed to create buffer");
 		CLBuffer *buf_c = context->createBuffer(CL_MEM_READ_ONLY, n * sizeof(cl_float), NULL, &err);
 		checkErr(err || buf_c == NULL, "failed to create buffer");
-        
+
 		CLProgram *program = context->createProgram(kernel_source, &err);
 		checkErr(err || program == NULL, "failed to create program");
-        
+
 		std::cout << "building program ...";
 		CLError build_error;
 
@@ -276,7 +273,7 @@ main(void)
 
 		std::string log = program->getBuildLog(device, &err);
 
-		if(build_error) std::cout << "FAILED: " << build_error.getString() << " (" 
+		if(build_error) std::cout << "FAILED: " << build_error.getString() << " ("
 			<< build_error.getCode() << ")" << std::endl;
 		else std::cout << "SUCCESS." << std::endl;
 

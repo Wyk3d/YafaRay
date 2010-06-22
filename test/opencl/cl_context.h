@@ -1,7 +1,7 @@
 #ifndef _CL_CONTEXT_H
 #define _CL_CONTEXT_H
 
-typedef CLObjectReleasableInfoBase <  
+typedef CLObjectReleasableInfoBase <
 	cl_context,
 	&clReleaseContext,
 	cl_context_info,
@@ -32,7 +32,7 @@ public:
 		if(err = clGetContextInfo(id, CL_CONTEXT_DEVICES, 0, 0, &size))
 			return dlist;
 
-		// get the devices 
+		// get the devices
 		cl_device_id* devices = new cl_device_id[size/sizeof(cl_device_id)];
 		if(err = clGetContextInfo(id, CL_CONTEXT_DEVICES, size, devices, 0)) {
 			delete[] devices;
@@ -40,7 +40,7 @@ public:
 		}
 
 		// add the devices to the list
-		for(int i = 0; i < size / sizeof(cl_device_id); ++i)
+		for(size_t i = 0; i < size / sizeof(cl_device_id); ++i)
 			dlist.push_back(devices[i]);
 
 		return dlist;

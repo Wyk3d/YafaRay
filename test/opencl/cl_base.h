@@ -21,7 +21,7 @@ class CLObjectBase
 
 template <
 	typename ObjType,
-	typename InfoType, 
+	typename InfoType,
 	CL_API_ENTRY cl_int (CL_API_CALL *InfoFunc)(ObjType, InfoType, size_t, void*, size_t*)
 >
 class CLInfoTraits
@@ -47,7 +47,7 @@ class CLInfoTraits
 				info,
 				size,
 				&ret,
-				NULL)) 
+				NULL))
 				return ret;
 
 			return ret;
@@ -62,7 +62,7 @@ class CLInfoTraits
 				info,
 				0,
 				NULL,
-				&size)) 
+				&size))
 				return "";
 
 			// get the info string
@@ -71,7 +71,7 @@ class CLInfoTraits
 				info,
 				size,
 				pbuf,
-				NULL)) 
+				NULL))
 			{
 				delete[] pbuf;
 				return "";
@@ -91,7 +91,7 @@ class CLInfoTraits
 				info,
 				0,
 				NULL,
-				&size)) 
+				&size))
 				return ilist;
 
 			// get the info list
@@ -100,13 +100,13 @@ class CLInfoTraits
 				info,
 				size,
 				info_buf,
-				NULL)) 
+				NULL))
 			{
 				delete[] info_buf;
 				return ilist;
 			}
 
-			for(int i = 0; i < size / sizeof(T); ++i)
+			for(size_t i = 0; i < size / sizeof(T); ++i)
 				ilist.push_back(info_buf[i]);
 
 			return ilist;
@@ -115,7 +115,7 @@ class CLInfoTraits
 
 template <
 	typename ObjType,
-	typename InfoType, 
+	typename InfoType,
 	CL_API_ENTRY cl_int (CL_API_CALL *InfoFunc)(ObjType, InfoType, size_t, void*, size_t*)
 >
 class CLObjectInfoBase :
@@ -130,7 +130,7 @@ class CLObjectInfoBase :
 	public:
 		template<typename T>
 		T getInfo(InfoType info, CLError *error = NULL) {
-			return infoTraits.getInfo<T>(id, info, error);
+			return infoTraits.getInfo<T>(this->id, info, error);
 		}
 
 		std::string getStringInfo(InfoType info, CLError *error) {
@@ -149,11 +149,11 @@ template <
 	typename InfoType,
 	CL_API_ENTRY cl_int (CL_API_CALL *InfoFunc)(ObjType, InfoType, size_t, void*, size_t*)
 >
-class CLObjectReleasableInfoBase : 
+class CLObjectReleasableInfoBase :
 	public CLObjectInfoBase< ObjType, InfoType, InfoFunc >
 {
 	protected:
-		CLObjectReleasableInfoBase(ObjType id) : 
+		CLObjectReleasableInfoBase(ObjType id) :
 			 CLObjectInfoBase< ObjType, InfoType, InfoFunc >(id) {
 		}
 
