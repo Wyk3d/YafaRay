@@ -12,6 +12,7 @@ option(BUILDRELEASE "Enable release mode building of YafaRay" OFF)
 option(EMBED_FONT_QT "Embed font for QT GUI (usefull for some buggy QT installations)" OFF)
 option(DEBUG_BUILD "Enable debug build mode" OFF)
 option(WITH_TESTS "Enable building test applications for various components of Yafaray" OFF)
+option(TESTS_ONLY "Build only the test applications, not the rest of the core (implies WITH_TESTS)" OFF)
 option(WITH_OPENCL "Enable the use of OpenCL and GPU accelerated rendering where avaialble" OFF)
 
 ###### Packages and Definitions #########
@@ -207,11 +208,14 @@ endif (USER_DBGFLAGS)
 
 # Adding subdirectories
 
-add_subdirectory(src)
+if (NOT TESTS_ONLY)
+	add_subdirectory(src)
+endif (NOT TESTS_ONLY)
 
-if (WITH_TESTS)
+
+if (WITH_TESTS OR TESTS_ONLY)
 	add_subdirectory(test)
-endif (WITH_TESTS)
+endif (WITH_TESTS OR TESTS_ONLY)
 
 if (WITH_YAF_PY_BINDINGS)
 	include(${SWIG_USE_FILE})
