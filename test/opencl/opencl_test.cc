@@ -3,6 +3,7 @@
 #include "cl_wrapper.h"
 #include <time.h>
 #include <stdlib.h>
+#include <math.h>
 
 const char *kernel_source = CL_SRC(
   __kernel void vectorAdd(int n,
@@ -239,7 +240,7 @@ main(void)
 		checkErr(err || devices.empty(), "failed to find devices for the chosen platform");
 		CLDevice device = *devices.begin();
 
-		  for(std::list<CLDevice>::iterator itr = devices.begin(); itr != devices.end(); ++itr) {
+		for(std::list<CLDevice>::iterator itr = devices.begin(); itr != devices.end(); ++itr) {
 			// if there are is more than one device to choose from, override with a GPU
 			if(itr->getType() == CL_DEVICE_TYPE_GPU)
 				device = *itr;
@@ -285,32 +286,25 @@ main(void)
 		CLKernel *kernel = program->createKernel("vectorAdd", &err);
 		checkErr(err || !kernel, "failed to create kernel");
 
-        /*error = clSetKernelArg(kernel, 0, sizeof(cl_int), (void*) &n);
-        assert(error == CL_SUCCESS);
-        error = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void*) &ad);
-        assert(error == CL_SUCCESS);
-        error = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void*) &bd);
-        assert(error == CL_SUCCESS);
-        error = clSetKernelArg(kernel, 3, sizeof(cl_mem), (void*) &cd);
-        assert(error == CL_SUCCESS);
+		kernel->setArgs(n, buf_a, buf_b, buf_c, &err);
+		checkErr(err, "failed to set args");
 
-        error = clEnqueueWriteBuffer(queue, ad, CL_FALSE, 0, n * sizeof(cl_float), a, 0, 0, 0);
-        assert(error == CL_SUCCESS);
-        error = clEnqueueWriteBuffer(queue, bd, CL_FALSE, 0, n * sizeof(cl_float), b, 0, 0, 0);
-        assert(error == CL_SUCCESS);
+		queue->writeBuffer(buf_a, 0, n*sizeof(cl_float), a, &err);
+		checkErr(err, "failed to write buf a");
+		queue->writeBuffer(buf_b, 0, n*sizeof(cl_float), b, &err);
+		checkErr(err, "failed to write buf b");
 
-        size_t local_work_size = LOCAL_WORK_SIZE;
-        size_t global_work_size = (size_t) ceil((double) n / local_work_size) * local_work_size;
-        error = clEnqueueNDRangeKernel(queue, kernel, 1, 0, &global_work_size, &local_work_size, 0, 0, 0);
-        assert(error == CL_SUCCESS);
+		size_t local_work_size = LOCAL_WORK_SIZE;
+		size_t global_work_size = (size_t) ceil((double) n / local_work_size) * local_work_size;
 
-        error = clEnqueueReadBuffer(queue, cd, CL_TRUE, 0, n * sizeof(cl_float), c, 0, 0, 0);
-        assert(error == CL_SUCCESS);
+		queue->runKernel(kernel, Range1D(global_work_size, local_work_size), &err);
+		checkErr(err, "failed to run kernel");
 
-        error = clReleaseCommandQueue(queue);
+		queue->readBuffer(buf_c, 0, n*sizeof(cl_float), c, &err);
+		checkErr(err, "failed to read buf c");
 
 		for (int i = 0; i < n; ++i)
-			assert(c[i] == n);*/
+			checkErr(c[i] == n, "result not computed correctly");
 
 		delete [] a;
 		delete [] b;
@@ -324,6 +318,8 @@ main(void)
 		checkErr(err, "failed to release buffer b");
 		buf_a->free(&err);
 		checkErr(err, "failed to release buffer a");
+		queue->free(&err);
+		checkErr(err, "failed to release queue");
 		context->free(&err);
 		checkErr(err, "failed to release context");
 }

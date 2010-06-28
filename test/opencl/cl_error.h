@@ -144,6 +144,10 @@ public:
 
 	}
 
+	CLCombinedError(bool success) : success(success) {
+
+	}
+
 	bool isCombinedSuccess() const {
 		return success && CLError::hasSucceeded();
 	}

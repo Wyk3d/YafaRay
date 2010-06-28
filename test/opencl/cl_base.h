@@ -14,7 +14,7 @@ class CLObjectBase
 
 		}
 	public:
-		ObjType getId() {
+		const ObjType& getId() const {
 			return id;
 		}
 };
