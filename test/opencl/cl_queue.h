@@ -29,14 +29,14 @@ public:
 	}
 
 	template<class Range>
-	void runKernel(const CLKernel *kernel, Range &r, CLError *error) {
+	void runKernel(const CLKernel *kernel, const Range &r, CLError *error) {
 		CLErrGuard err(error);
 		cl_event ev;
 		err = clEnqueueNDRangeKernel(
-			id, kernel->getId(), 
-			r.getWorkDim(), 
-			NULL, 
-			r.getGlobalSizes(), r.getLocalSizes(), 
+			id, kernel->getId(),
+			r.getWorkDim(),
+			NULL,
+			r.getGlobalSizes(), r.getLocalSizes(),
 			NULL, NULL, &ev);
 		clWaitForEvents(1, &ev);
 	}
@@ -51,15 +51,15 @@ class Range1D
 
 		}
 
-		cl_uint getWorkDim() {
+		cl_uint getWorkDim() const {
 			return 1;
 		}
 
-		size_t *getGlobalSizes() {
+		const size_t *getGlobalSizes() const {
 			return &global;
 		}
 
-		size_t *getLocalSizes() {
+		const size_t *getLocalSizes() const {
 			return &local;
 		}
 };
@@ -76,17 +76,18 @@ public:
 		local[1] = local_y;
 	}
 
-	cl_uint getWorkDim() {
+	cl_uint getWorkDim() const {
 		return 2;
 	}
 
-	size_t *getGlobalSizes() {
+	const size_t *getGlobalSizes() const {
 		return global;
 	}
 
-	size_t *getLocalSizes() {
+	const size_t *getLocalSizes() const {
 		return local;
 	}
 };
 
 #endif //_CL_QUEUE_H
+

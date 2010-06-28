@@ -49,7 +49,11 @@ class CLKernel :
 			}
 
 		protected:
-			IsDerivedFrom() { void(*p)(D*) = Constraints; }
+			IsDerivedFrom() {
+				reference(&Constraints); // don't execute it, just reference it
+			}
+
+			void reference(void(*)(D*)) {}
 		};
 
 		template< class Mem >
