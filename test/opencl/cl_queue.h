@@ -11,35 +11,36 @@ typedef CLObjectReleasableInfoBase <
 class CLCommandQueue
 	: public CLCommandQueueBase
 {
-private:
-	CLCommandQueue(cl_command_queue id) : CLCommandQueueBase(id) {
+	private:
+		CLCommandQueue(cl_command_queue id) : CLCommandQueueBase(id) {
 
-	}
-public:
-	friend class CLContext;
+		}
+	public:
+		friend class CLContext;
 
-	void writeBuffer(const CLBuffer *buffer, size_t offset, size_t size, const void *mem, CLError *error) {
-		CLErrGuard err(error);
-		clEnqueueWriteBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
-	}
+		void writeBuffer(const CLBuffer *buffer, size_t offset, size_t size, const void *mem, CLError *error) {
+			CLErrGuard err(error);
+			clEnqueueWriteBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
+		}
 
-	void readBuffer(const CLBuffer *buffer, size_t offset, size_t size, void *mem, CLError *error) {
-		CLErrGuard err(error);
-		clEnqueueReadBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
-	}
+		void readBuffer(const CLBuffer *buffer, size_t offset, size_t size, void *mem, CLError *error) {
+			CLErrGuard err(error);
+			clEnqueueReadBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
+		}
 
-	template<class Range>
-	void runKernel(const CLKernel *kernel, const Range &r, CLError *error) {
-		CLErrGuard err(error);
-		cl_event ev;
-		err = clEnqueueNDRangeKernel(
-			id, kernel->getId(),
-			r.getWorkDim(),
-			NULL,
-			r.getGlobalSizes(), r.getLocalSizes(),
-			NULL, NULL, &ev);
-		clWaitForEvents(1, &ev);
-	}
+		template<class Range>
+		void runKernel(const CLKernel *kernel, const Range &r, CLError *error) {
+			CLErrGuard err(error);
+			cl_event ev;
+			err = clEnqueueNDRangeKernel(
+				id, kernel->getId(),
+				r.getWorkDim(),
+				NULL,
+				r.getGlobalSizes(), r.getLocalSizes(),
+				NULL, NULL, &ev);
+			if(err) return;
+			clWaitForEvents(1, &ev);
+		}
 };
 
 class Range1D

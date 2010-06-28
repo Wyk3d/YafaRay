@@ -1,8 +1,7 @@
 #include <yafray_config.h>
 
-#include "cl_wrapper.h"
+#include "cl_util.h"
 #include <time.h>
-#include <stdlib.h>
 #include <math.h>
 
 const char *kernel_source = CL_SRC(
@@ -34,18 +33,6 @@ const char *kernel_source = CL_SRC(
 #define LOCAL_WORK_SIZE 256
 
 #include <iostream>
-
-inline void
-checkErr(CLCombinedError err, const char * message = "", bool fatal = true)
-{
-	if (!err.isCombinedSuccess()) {
-		std::cerr << "ERROR: " << message;
-		if(err.hasFailed())
-			std::cerr << " " << err.getString() << " (" << err.getCode() << ")";
-		std::cerr << std::endl;
-		if(fatal) exit(EXIT_FAILURE);
-	}
-}
 
 void printPlatformInfo(CLPlatform platform) {
 	std::cout << "Platform " << platform.getName() << " (" << platform.getId() << ")" << std::endl;
@@ -258,30 +245,10 @@ main(void)
 		checkErr(err || buf_a == NULL, "failed to create buffer");
 		CLBuffer *buf_b = context->createBuffer(CL_MEM_READ_ONLY, n * sizeof(cl_float), NULL, &err);
 		checkErr(err || buf_b == NULL, "failed to create buffer");
-		CLBuffer *buf_c = context->createBuffer(CL_MEM_READ_ONLY, n * sizeof(cl_float), NULL, &err);
+		CLBuffer *buf_c = context->createBuffer(CL_MEM_WRITE_ONLY, n * sizeof(cl_float), NULL, &err);
 		checkErr(err || buf_c == NULL, "failed to create buffer");
 
-		CLProgram *program = context->createProgram(kernel_source, &err);
-		checkErr(err || program == NULL, "failed to create program");
-
-		std::cout << "building program ...";
-		CLError build_error;
-
-		clock_t start = clock();
-		program->build(&build_error);
-		clock_t end = clock();
-		std::cout << "[" << (float)(end-start)/(float)CLOCKS_PER_SEC << "s]: ";
-
-		std::string log = program->getBuildLog(device, &err);
-
-		if(build_error) std::cout << "FAILED: " << build_error.getString() << " ("
-			<< build_error.getCode() << ")" << std::endl;
-		else std::cout << "SUCCESS." << std::endl;
-
-		checkErr(err, "failed to get build log");
-		if(log != "") std::cout << log << std::endl;
-		if(build_error)
-			exit(EXIT_FAILURE);
+		CLProgram *program = buildCLProgram(kernel_source, context, device);
 
 		CLKernel *kernel = program->createKernel("vectorAdd", &err);
 		checkErr(err || !kernel, "failed to create kernel");

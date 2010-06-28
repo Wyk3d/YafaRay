@@ -103,9 +103,4 @@ public:
 	friend class CLDevice;
 };
 
-CLPlatform CLDevice::getPlatform(CLError *error)
-{
-	return getInfo<cl_platform_id>(CL_DEVICE_PLATFORM, error);
-}
-
 #endif //_CL_PLATFORM_H
