@@ -19,11 +19,11 @@ template<> struct CLParamType<int> {
 };
 template<> struct CLParamType<float> { 
 	static void addTypeTo(std::ostream &s) { s << "float"; };
-	static void addValTo(std::ostream &s, int val) { s << val; };
+	static void addValTo(std::ostream &s, float val) { s << val; };
 };
 template<> struct CLParamType<unsigned int> {
 	static void addTypeTo(std::ostream &s) { s << "unsigned int"; };
-	static void addValTo(std::ostream &s, int val) { s << val; };
+	static void addValTo(std::ostream &s, unsigned int val) { s << val; };
 };
 
 template<class T>
@@ -43,8 +43,6 @@ class CLParamT : public CLParam {
 			CLParamType<T>::addValTo(s, val);
 		}
 };
-
-class CLSrcConst;
 
 class CLParamHolder {
 	private:

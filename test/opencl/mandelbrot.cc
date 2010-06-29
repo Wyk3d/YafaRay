@@ -10,18 +10,18 @@ using namespace yafaray;
 renderEnvironment_t *env;
 imageHandler_t *handler;
 
-unsigned int w = 1024;
-unsigned int h = 768;
+unsigned int w = 512;
+unsigned int h = 384;
 float MinRe = -2.0;
 float MaxRe = 1.0;
 float MinIm = -1.2;
 float MaxIm = MinIm+(MaxRe-MinRe)*h/w;
 float Re_factor = (MaxRe-MinRe)/(w-1);
 float Im_factor = (MaxIm-MinIm)/(h-1);
-unsigned MaxIterations = 30000;
+unsigned MaxIterations = 60000;
 
-void putN(int x, int y, unsigned int n) {
-	if(n < 0) {
+void putN(int x, int y, int n) {
+	if(n == MaxIterations) {
 		handler->putPixel(x,y, color_t(0,0,0));
 	} else {
 		if(n < MaxIterations/2) {
@@ -44,7 +44,7 @@ void doCPU() {
 			double c_re = MinRe + x*Re_factor;
 
 			double Z_re = c_re, Z_im = c_im;
-			unsigned n;
+			int n;
 			for(n=0; n<MaxIterations; ++n)
 			{
 				double Z_re2 = Z_re*Z_re, Z_im2 = Z_im*Z_im;
@@ -53,7 +53,6 @@ void doCPU() {
 				Z_im = 2*Z_re*Z_im + c_im;
 				Z_re = Z_re2 - Z_im2 + c_re;
 			}
-			if(n == MaxIterations) n = -1;
 			putN(x,y,n);
 		}
 		printf("+");
@@ -86,29 +85,10 @@ void runOCL( void (*cb)(CLDevice device, CLContext *context, CLCommandQueue *que
 }
 
 const char *kernel_source = CL_SRC(
-	/*__constant int w = 1024;
-	__constant int h = 768;
-	__constant float MinRe = -2.0f;
-	__constant float MaxRe = 1.0f;
-	__constant float MinIm = -1.2f;
-	__constant unsigned MaxIterations = 30000;*/
-
-	/*typedef struct {
-		int w;
-		int h;
-		float MinRe;
-		float MaxRe;
-		float MinIm;
-		unsigned MaxIterations;
-	} const_t;
-
-	__constant const_t ct = { 1024, 768, -2.0f, 1.0f, -1.2f, 30000 };*/
-
    __kernel void mandelbrot(
 		__global int* a
 	)
 	{
-
 		int x = get_global_id(0);
 		int y = get_global_id(1);
 		if (x >= ct.w || y >= ct.h)
@@ -125,7 +105,7 @@ const char *kernel_source = CL_SRC(
 		float Z_re = c_re;
 		float Z_im = c_im;
 
-		unsigned n;
+		int n;
 		for(n = 0; n < ct.MaxIterations; ++n)
 		{
 			float Z_re2 = Z_re*Z_re, Z_im2 = Z_im*Z_im;
@@ -221,10 +201,10 @@ int main() {
 
 	clock_t start, end;
 
-/*	start = clock();
+	start = clock();
 	doCPU();
 	end = clock();
-	printf("CPU time: %f\n", (end-start)/(float)CLOCKS_PER_SEC);*/
+	printf("CPU time: %f\n", (end-start)/(float)CLOCKS_PER_SEC);
 
 	handler->saveToFile("mandelbrotCPU.jpg");
 
