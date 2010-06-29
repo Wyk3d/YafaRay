@@ -41,7 +41,7 @@ else(ENV_ATISTREAMSDKROOT)
   if (APPLE)
      find_path(
       OPENCL_INCLUDE_DIR
-      NAMES CL/cl.h OpenCL/cl.h
+      NAMES cl.h
     )
   else (APPLE)
     find_path(
