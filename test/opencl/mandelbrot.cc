@@ -89,6 +89,17 @@ const char *kernel_source = CL_SRC(
 		__global int* a
 	)
 	{
+		typedef struct {
+			unsigned int MaxIterations;
+			float MaxRe;
+			float MinIm;
+			float MinRe;
+			unsigned int h;
+			unsigned int w;
+		} const_t;
+		const_t ct = {
+			60000, 1, -1.2, -2, 384, 512};
+
 		int x = get_global_id(0);
 		int y = get_global_id(1);
 		if (x >= ct.w || y >= ct.h)
@@ -126,7 +137,7 @@ void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 	CLBuffer *buf_a = context->createBuffer(CL_MEM_READ_WRITE, w*h*sizeof(int), NULL, &err);
 	checkErr(err, "failed to create buffer");
 
-	CLSrcConst ct;
+	/*CLSrcConst ct;
 	ct["w"] = w;
 	ct["h"] = h;
 	ct["MinRe"] = MinRe;
@@ -134,9 +145,9 @@ void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 	ct["MinIm"] = MinIm;
 	ct["MaxIterations"] = MaxIterations;
 
-	std::string src = (std::string)ct + kernel_source;
+	std::string src = (std::string)ct + kernel_source;*/
 
-	CLProgram *program = buildCLProgram(src.c_str(), context, device);
+	CLProgram *program = buildCLProgram(/*src.c_str()*/kernel_source, context, device);
 
 	CLKernel *kernel = program->createKernel("mandelbrot", &err);
 	checkErr(err, "failed to create kernel");
