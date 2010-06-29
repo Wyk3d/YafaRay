@@ -1,7 +1,11 @@
 #ifndef _CL_WRAPPER_H
 #define _CL_WRAPPER_H
 
+#if defined(__APPLE__) || defined(__MACOSX)
+#include <cl.h>
+#else
 #include <CL/cl.h>
+#endif
 
 #include <string>
 #include <list>

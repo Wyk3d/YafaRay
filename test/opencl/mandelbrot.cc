@@ -238,7 +238,7 @@ int main() {
 	end = clock();
 	printf("OpenCL time: %f\n", (end-start)/(float)CLOCKS_PER_SEC);
 
-	checkDiff();
+	//checkDiff();
 
 	handler->saveToFile("mandelbrotOCL.jpg");
 

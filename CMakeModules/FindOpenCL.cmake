@@ -1,11 +1,20 @@
 set(ENV_ATISTREAMSDKROOT $ENV{ATISTREAMSDKROOT})
 if(ENV_ATISTREAMSDKROOT)
-  find_path(
-    OPENCL_INCLUDE_DIR
-    NAMES CL/cl.h OpenCL/cl.h
-    PATHS $ENV{ATISTREAMSDKROOT}/include
-    NO_DEFAULT_PATH
+  if (APPLE)
+    find_path(
+      OPENCL_INCLUDE_DIR
+      NAMES cl.h
+      PATHS $ENV{ATISTREAMSDKROOT}/include
+      NO_DEFAULT_PATH
     )
+  else (APPLE)
+    find_path(
+      OPENCL_INCLUDE_DIR
+      NAMES CL/cl.h OpenCL/cl.h
+      PATHS $ENV{ATISTREAMSDKROOT}/include
+      NO_DEFAULT_PATH
+    )
+  endif (APPLE)
 
   if("${CMAKE_SYSTEM_NAME}" MATCHES "Linux")
     if(CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -29,10 +38,17 @@ if(ENV_ATISTREAMSDKROOT)
     NO_DEFAULT_PATH
     )
 else(ENV_ATISTREAMSDKROOT)
-  find_path(
-    OPENCL_INCLUDE_DIR
-    NAMES CL/cl.h OpenCL/cl.h
+  if (APPLE)
+     find_path(
+      OPENCL_INCLUDE_DIR
+      NAMES CL/cl.h OpenCL/cl.h
     )
+  else (APPLE)
+    find_path(
+      OPENCL_INCLUDE_DIR
+      NAMES CL/cl.h OpenCL/cl.h
+    )
+  endif (APPLE)
 
   find_library(
     OPENCL_LIBRARY
