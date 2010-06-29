@@ -34,26 +34,29 @@ void putN(int x, int y, int n) {
 	}
 }
 
+int nCPU[2048][2048], nGPU[2048][2048];
+
 void doCPU() {
 	// from http://warp.povusers.org/Mandelbrot/
 	for(unsigned y=0; y<h; ++y)
 	{
-		double c_im = MaxIm - y*Im_factor;
+		float c_im = MaxIm - y*Im_factor;
 		for(unsigned x=0; x<w; ++x)
 		{
-			double c_re = MinRe + x*Re_factor;
+			float c_re = MinRe + x*Re_factor;
 
-			double Z_re = c_re, Z_im = c_im;
+			float Z_re = c_re, Z_im = c_im;
 			int n;
 			for(n=0; n<MaxIterations; ++n)
 			{
-				double Z_re2 = Z_re*Z_re, Z_im2 = Z_im*Z_im;
+				float Z_re2 = Z_re*Z_re, Z_im2 = Z_im*Z_im;
 				if(Z_re2 + Z_im2 > 4)
 					break;
 				Z_im = 2*Z_re*Z_im + c_im;
 				Z_re = Z_re2 - Z_im2 + c_re;
 			}
 			putN(x,y,n);
+			nCPU[y][x] = n;
 		}
 		printf("+");
 	}
@@ -165,6 +168,7 @@ void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 		for(unsigned x = 0; x < w; x++) {
 			int n = a[y*w + x];
 			putN(x,y,n);
+			nGPU[y][x] = n;
 		}
 	}
 
@@ -190,6 +194,16 @@ imageHandler_t *createHandler(std::string name, std::string type, int width, int
 	map["width"] = width;
 	map["height"] = height;
 	return env->createImageHandler(name, map);
+}
+
+void checkDiff() {
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			if(nCPU[i][j] != nGPU[i][j]) {
+				printf("different values (%d/%d) at (%d,%d)\n", nCPU[i][j], nGPU[i][j], i, j);
+			}
+		}
+	}
 }
 
 int main() {
@@ -223,6 +237,8 @@ int main() {
 	doOpenCL();
 	end = clock();
 	printf("OpenCL time: %f\n", (end-start)/(float)CLOCKS_PER_SEC);
+
+	checkDiff();
 
 	handler->saveToFile("mandelbrotOCL.jpg");
 
