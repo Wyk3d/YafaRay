@@ -12,12 +12,12 @@ imageHandler_t *handler;
 
 unsigned int w = 1024;
 unsigned int h = 768;
-double MinRe = -2.0;
-double MaxRe = 1.0;
-double MinIm = -1.2;
-double MaxIm = MinIm+(MaxRe-MinRe)*h/w;
-double Re_factor = (MaxRe-MinRe)/(w-1);
-double Im_factor = (MaxIm-MinIm)/(h-1);
+float MinRe = -2.0;
+float MaxRe = 1.0;
+float MinIm = -1.2;
+float MaxIm = MinIm+(MaxRe-MinRe)*h/w;
+float Re_factor = (MaxRe-MinRe)/(w-1);
+float Im_factor = (MaxIm-MinIm)/(h-1);
 unsigned MaxIterations = 30000;
 
 void putN(int x, int y, unsigned int n) {
@@ -86,50 +86,56 @@ void runOCL( void (*cb)(CLDevice device, CLContext *context, CLCommandQueue *que
 }
 
 const char *kernel_source = CL_SRC(
+	/*__constant int w = 1024;
+	__constant int h = 768;
+	__constant float MinRe = -2.0f;
+	__constant float MaxRe = 1.0f;
+	__constant float MinIm = -1.2f;
+	__constant unsigned MaxIterations = 30000;*/
+
+	/*typedef struct {
+		int w;
+		int h;
+		float MinRe;
+		float MaxRe;
+		float MinIm;
+		unsigned MaxIterations;
+	} const_t;
+
+	__constant const_t ct = { 1024, 768, -2.0f, 1.0f, -1.2f, 30000 };*/
+
    __kernel void mandelbrot(
 		__global int* a
 	)
 	{
-		int w = 1024;
-		int h = 768;
 
 		int x = get_global_id(0);
 		int y = get_global_id(1);
-		if (x >= w || y >= h)
+		if (x >= ct.w || y >= ct.h)
 			return;
 
-		float MinRe = -2.0;
-		float MaxRe = 1.0;
-		float MinIm = -1.2;
-		float MaxIm = MinIm+(MaxRe-MinRe)*h/w;
-		float Re_factor = (MaxRe-MinRe)/(w-1);
-		float Im_factor = (MaxIm-MinIm)/(h-1);
-		unsigned MaxIterations = 30000;
+		float MaxIm = ct.MinIm + (ct.MaxRe - ct.MinRe) * ct.h / ct.w;
+		float Re_factor = (ct.MaxRe - ct.MinRe) / (ct.w - 1);
+		float Im_factor = (MaxIm - ct.MinIm) / (ct.h - 1);
+		
 
 		float c_im = MaxIm - y*Im_factor;
-		float c_re = MinRe + x*Re_factor;
+		float c_re = ct.MinRe + x*Re_factor;
 
 		float Z_re = c_re;
 		float Z_im = c_im;
 
-		bool isInside = true;
 		unsigned n;
-		for(n=0; n<MaxIterations; ++n)
+		for(n = 0; n < ct.MaxIterations; ++n)
 		{
 			float Z_re2 = Z_re*Z_re, Z_im2 = Z_im*Z_im;
 			if(Z_re2 + Z_im2 > 4)
-			{
-				isInside = false;
 				break;
-			}
 			Z_im = 2*Z_re*Z_im + c_im;
 			Z_re = Z_re2 - Z_im2 + c_re;
 		}
-		if(isInside) {
-			a[x+y*w]=-1;
-		} else {
-			a[x+y*w]=n;
-		}
+
+		a[x + y * ct.w] = n;
 	}
 );
 
@@ -140,7 +146,17 @@ void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 	CLBuffer *buf_a = context->createBuffer(CL_MEM_READ_WRITE, w*h*sizeof(int), NULL, &err);
 	checkErr(err, "failed to create buffer");
 
-	CLProgram *program = buildCLProgram(kernel_source, context, device);
+	CLSrcConst ct;
+	ct["w"] = w;
+	ct["h"] = h;
+	ct["MinRe"] = MinRe;
+	ct["MaxRe"] = MaxRe;
+	ct["MinIm"] = MinIm;
+	ct["MaxIterations"] = MaxIterations;
+
+	std::string src = (std::string)ct + kernel_source;
+
+	CLProgram *program = buildCLProgram(src.c_str(), context, device);
 
 	CLKernel *kernel = program->createKernel("mandelbrot", &err);
 	checkErr(err, "failed to create kernel");
@@ -205,10 +221,10 @@ int main() {
 
 	clock_t start, end;
 
-	start = clock();
+/*	start = clock();
 	doCPU();
 	end = clock();
-	printf("CPU time: %f\n", (end-start)/(float)CLOCKS_PER_SEC);
+	printf("CPU time: %f\n", (end-start)/(float)CLOCKS_PER_SEC);*/
 
 	handler->saveToFile("mandelbrotCPU.jpg");
 
