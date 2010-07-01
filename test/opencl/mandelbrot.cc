@@ -10,8 +10,8 @@ using namespace yafaray;
 renderEnvironment_t *env;
 imageHandler_t *handler;
 
-unsigned int w = 512;
-unsigned int h = 384;
+unsigned int w = 256;
+unsigned int h = 192;
 float MinRe = -2.0;
 float MaxRe = 1.0;
 float MinIm = -1.2;
@@ -101,7 +101,7 @@ const char *kernel_source = CL_SRC(
 			unsigned int w;
 		} const_t;
 		const_t ct = {
-			60000, 1, -1.2, -2, 384, 512};
+			60000, 1, -1.2, -2, 192, 256};
 
 		int x = get_global_id(0);
 		int y = get_global_id(1);
@@ -135,9 +135,9 @@ const char *kernel_source = CL_SRC(
 
 void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 	CLError err;
-	int *a = new int[w*h];
+	int *a = new cl_int[w*h];
 
-	CLBuffer *buf_a = context->createBuffer(CL_MEM_READ_WRITE, w*h*sizeof(int), NULL, &err);
+	CLBuffer *buf_a = context->createBuffer(CL_MEM_READ_WRITE, w*h*sizeof(cl_int), NULL, &err);
 	checkErr(err, "failed to create buffer");
 
 	/*CLSrcConst ct;
@@ -227,7 +227,7 @@ int main() {
 	clock_t start, end;
 
 	start = clock();
-	doCPU();
+	//doCPU();
 	end = clock();
 	printf("CPU time: %f\n", (end-start)/(float)CLOCKS_PER_SEC);
 
