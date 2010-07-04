@@ -12,6 +12,10 @@ imageHandler_t *handler;
 
 unsigned int w = 256;
 unsigned int h = 192;
+//unsigned int w = 512;
+//unsigned int h = 384;
+//unsigned int w = 1024;
+//unsigned int h = 768;
 float MinRe = -2.0;
 float MaxRe = 1.0;
 float MinIm = -1.2;
@@ -20,7 +24,7 @@ float Re_factor = (MaxRe-MinRe)/(w-1);
 float Im_factor = (MaxIm-MinIm)/(h-1);
 unsigned MaxIterations = 60000;
 
-void putN(int x, int y, int n) {
+void putN(int x, int y, unsigned n) {
 	if(n == MaxIterations) {
 		handler->putPixel(x,y, color_t(0,0,0));
 	} else {
@@ -34,7 +38,7 @@ void putN(int x, int y, int n) {
 	}
 }
 
-int nCPU[2048][2048], nGPU[2048][2048];
+unsigned nCPU[2048][2048], nGPU[2048][2048];
 
 void doCPU() {
 	// from http://warp.povusers.org/Mandelbrot/
@@ -46,7 +50,7 @@ void doCPU() {
 			float c_re = MinRe + x*Re_factor;
 
 			float Z_re = c_re, Z_im = c_im;
-			int n;
+			unsigned n;
 			for(n=0; n<MaxIterations; ++n)
 			{
 				float Z_re2 = Z_re*Z_re, Z_im2 = Z_im*Z_im;
@@ -89,37 +93,23 @@ void runOCL( void (*cb)(CLDevice device, CLContext *context, CLCommandQueue *que
 
 const char *kernel_source = CL_SRC(
    __kernel void mandelbrot(
-		__global int* a
+		__global unsigned* a
 	)
 	{
-		typedef struct {
-			unsigned int MaxIterations;
-			float MaxRe;
-			float MinIm;
-			float MinRe;
-			unsigned int h;
-			unsigned int w;
-		} const_t;
-		const_t ct = {
-			60000, 1, -1.2, -2, 192, 256};
+		PARAM_PRIVATE_MANDELBROT(ct);
 
 		int x = get_global_id(0);
 		int y = get_global_id(1);
 		if (x >= ct.w || y >= ct.h)
 			return;
 
-		float MaxIm = ct.MinIm + (ct.MaxRe - ct.MinRe) * ct.h / ct.w;
-		float Re_factor = (ct.MaxRe - ct.MinRe) / (ct.w - 1);
-		float Im_factor = (MaxIm - ct.MinIm) / (ct.h - 1);
-		
-
-		float c_im = MaxIm - y*Im_factor;
-		float c_re = ct.MinRe + x*Re_factor;
+		float c_im = ct.MaxIm - y * ct.Im_factor;
+		float c_re = ct.MinRe + x * ct.Re_factor;
 
 		float Z_re = c_re;
 		float Z_im = c_im;
 
-		int n;
+		unsigned n;
 		for(n = 0; n < ct.MaxIterations; ++n)
 		{
 			float Z_re2 = Z_re*Z_re, Z_im2 = Z_im*Z_im;
@@ -135,22 +125,24 @@ const char *kernel_source = CL_SRC(
 
 void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 	CLError err;
-	int *a = new cl_int[w*h];
+	unsigned *a = new cl_uint[w*h];
 
-	CLBuffer *buf_a = context->createBuffer(CL_MEM_READ_WRITE, w*h*sizeof(cl_int), NULL, &err);
+	CLBuffer *buf_a = context->createBuffer(CL_MEM_READ_WRITE, w*h*sizeof(cl_uint), NULL, &err);
 	checkErr(err, "failed to create buffer");
 
-	/*CLSrcConst ct;
+	CLSrcParamMap ct("MANDELBROT");
 	ct["w"] = w;
 	ct["h"] = h;
+	ct["MaxIm"] = MaxIm;
 	ct["MinRe"] = MinRe;
-	ct["MaxRe"] = MaxRe;
-	ct["MinIm"] = MinIm;
+	ct["Re_factor"] = Re_factor;
+	ct["Im_factor"] = Im_factor;
 	ct["MaxIterations"] = MaxIterations;
 
-	std::string src = (std::string)ct + kernel_source;*/
+	std::string src = (std::string)ct + kernel_source;
+	//printf("%s", src.c_str());
 
-	CLProgram *program = buildCLProgram(/*src.c_str()*/kernel_source, context, device);
+	CLProgram *program = buildCLProgram(src.c_str(), context, device);
 
 	CLKernel *kernel = program->createKernel("mandelbrot", &err);
 	checkErr(err, "failed to create kernel");
@@ -166,7 +158,7 @@ void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 
 	for(unsigned y = 0; y < h; y++) {
 		for(unsigned x = 0; x < w; x++) {
-			int n = a[y*w + x];
+			unsigned n = a[y*w + x];
 			putN(x,y,n);
 			nGPU[y][x] = n;
 		}
@@ -197,8 +189,8 @@ imageHandler_t *createHandler(std::string name, std::string type, int width, int
 }
 
 void checkDiff() {
-	for(int i = 0; i < h; i++) {
-		for(int j = 0; j < w; j++) {
+	for(unsigned i = 0; i < h; i++) {
+		for(unsigned j = 0; j < w; j++) {
 			if(nCPU[i][j] != nGPU[i][j]) {
 				printf("different values (%d/%d) at (%d,%d)\n", nCPU[i][j], nGPU[i][j], i, j);
 			}
@@ -227,7 +219,7 @@ int main() {
 	clock_t start, end;
 
 	start = clock();
-	//doCPU();
+	doCPU();
 	end = clock();
 	printf("CPU time: %f\n", (end-start)/(float)CLOCKS_PER_SEC);
 
