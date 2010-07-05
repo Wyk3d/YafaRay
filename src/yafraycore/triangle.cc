@@ -499,5 +499,11 @@ void bsTriangle_t::getSurface(surfacePoint_t &sp, const point3d_t &hit, void *us
 	sp.light = mesh->light;
 }
 
+void triangle_t::getVertices(point3d_t &p1, point3d_t &p2, point3d_t &p3)
+{
+	p1 = mesh->points[pa];
+	p2 = mesh->points[pb];
+	p3 = mesh->points[pc];
+}
 
 __END_YAFRAY
