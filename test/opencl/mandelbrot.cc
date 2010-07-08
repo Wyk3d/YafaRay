@@ -119,6 +119,8 @@ const char *kernel_source = CL_SRC(
 			Z_re = Z_re2 - Z_im2 + c_re;
 		}
 
+		buffer(CLK_LOCAL_MEM_FENCE);
+
 		a[x + y * ct.w] = n;
 	}
 );
@@ -126,9 +128,15 @@ const char *kernel_source = CL_SRC(
 void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 	CLError err;
 	unsigned *a = new cl_uint[w*h];
+	memset(a, 0, w*h*sizeof(cl_uint));
 
 	CLBuffer *buf_a = context->createBuffer(CL_MEM_READ_WRITE, w*h*sizeof(cl_uint), NULL, &err);
 	checkErr(err, "failed to create buffer");
+
+	// the memory on the GPU must be initialized because it may even retain correct results
+	// from previous runs of the kernel when its latest version does not run properly
+	queue->writeBuffer(buf_a, 0, w*h*sizeof(cl_uint), buf_a, &err);
+	checkErr(err, "failed to initialize buffer");
 
 	CLSrcParamMap ct("MANDELBROT");
 	ct["w"] = w;
@@ -150,7 +158,7 @@ void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 	kernel->setArgs(buf_a, &err);
 	checkErr(err, "failed to set args");
 
-	queue->runKernel(kernel, Range2D(w,h,1,1), &err);
+	queue->runKernel(kernel, Range2D(w,h,16,16), &err);
 	checkErr(err, "failed to run kernel");
 
 	queue->readBuffer(buf_a, 0, w*h*sizeof(int), a, &err);
