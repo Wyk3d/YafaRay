@@ -72,8 +72,8 @@ void test(scene_t *scene) {
 			float area = 0.5 * (ab ^ ac).length();
 
 			float r = 0.1;
-			float area_cover = 2*sqrt(2.0);
-			int nr_to_keep = std::max((int)(area * area_cover / (r*r*M_PI)), 1);
+			float area_multiplier = 2*sqrt(2.0);
+			int nr_to_keep = std::max((int)(area * area_multiplier / (r*r*M_PI)), 1);
 			int nr_to_generate = nr_to_keep * 10;
 			printf("radius: %f\ngenerating: %d/%d\n", r, nr_to_keep, nr_to_generate);
 			
@@ -166,7 +166,17 @@ void test(scene_t *scene) {
 				}
 
 				for(int k = 0; k < num_tri_points; k++) {
-					scene->addTriangle(0, 1 + k, 1 + (k+1) % num_tri_points, t->getMaterial());
+					point3d_t &a = p, &b = tri_points[k], &c = tri_points[(k+1)%num_tri_points];
+					vector3d_t gn = ((b-a)^(c-a)).normalize();
+					float cos_n = gn * n;
+					const float similarity_threshold = 1.0 - 1e-4;
+					if(cos_n >= similarity_threshold) {
+						scene->addTriangle(0, 1 + k, 1 + (k+1) % num_tri_points, t->getMaterial()); 
+					} else if(-cos_n >= similarity_threshold) {
+						scene->addTriangle(0, 1 + (k+1) % num_tri_points, 1 + k, t->getMaterial());
+					} else {
+						Y_ERROR << "invalid normal found for triangle\n";
+					}
 				}
 				if(!scene->endTriMesh()) exit(0);
 				if(!scene->endGeometry()) exit(0);
