@@ -24,6 +24,159 @@
 
 using namespace::yafaray;
 
+#include <yafraycore/triangle.h>
+#include <yafraycore/meshtypes.h>
+#include <limits>
+
+void test(scene_t *scene) {
+	int max_to_generate = 320000;
+	struct ptd {
+		point3d_t p;
+		bool t;
+	};
+	std::vector<ptd> points;
+	points.resize(max_to_generate);
+
+	struct disk
+	{
+		point3d_t p;
+		int n_idx;
+		float r;
+		disk(const point3d_t &p, int n_idx, float r) : p(p), n_idx(n_idx), r(r) {}
+	};
+
+	std::vector<vector3d_t> normals;
+	std::vector<disk> disks;
+
+	int num_tri_points = 10;
+	std::vector<point3d_t> tri_points;
+	tri_points.resize(num_tri_points);
+
+	//scene_t::objDataArray_t &meshes = scene->getMeshes();
+	scene_t::objDataArray_t &meshes = scene->getMeshes();
+	scene_t::objDataArray_t::iterator itr = meshes.begin();
+	for(int orig_mesh_count = meshes.size(); orig_mesh_count--; ++itr) {
+		triangleObject_t *obj = itr->second.obj;
+		int nr_mesh_primitives = obj->numPrimitives();
+		const triangle_t **tris = new const triangle_t*[nr_mesh_primitives];
+		itr->second.obj->getPrimitives(tris);
+
+		for(int i = 0; i < nr_mesh_primitives; ++i) {
+			const triangle_t *t = tris[i];
+			point3d_t a, b, c;
+			t->getVertices(a, b, c);
+			vector3d_t n = t->getNormal();
+			normals.push_back(n);
+			
+			vector3d_t ab = b - a, ac = c - a;
+			float area = 0.5 * (ab ^ ac).length();
+
+			float r = 0.1;
+			float area_cover = 2*sqrt(2.0);
+			int nr_to_keep = std::max((int)(area * area_cover / (r*r*M_PI)), 1);
+			int nr_to_generate = nr_to_keep * 10;
+			printf("radius: %f\ngenerating: %d/%d\n", r, nr_to_keep, nr_to_generate);
+			
+			printf("------------\n");
+			for(int j = 0; j < nr_to_generate; j++)
+			{
+				float u = ourRandom();
+				float v = ourRandom();
+				points[j].p = a + v * ac + (1-v) * u * ab;
+				points[j].t = false;
+				//printf("(%f,%f,%f)", points[j].p.x, points[j].p.y, points[j].p.z);
+			}
+
+			for(int j = 0; j < nr_to_keep; j++)
+			{
+				int ppoz = 0;
+				
+				// get the non taken point whose minimum distance 
+				// to all taken points is maximum
+				float max_mind = std::numeric_limits<float>::min();
+
+				for(int k = 0; k < nr_to_generate; k++)
+				{
+					float mind = std::numeric_limits<float>::max();
+					if(!points[k].t)
+					{
+						
+						// TODO: avoid computing the distances more than once
+						for(int l = 0; l < nr_to_generate; l++) {
+						//for(int l = 0; l < j; l++) {
+						
+						//	float d = (points[k].p - disks[l].p).lengthSqr();
+							if(!points[l].t) continue;
+							float d = (points[k].p - points[l].p).lengthSqr();
+							if(d < mind) {
+								mind = d;
+							}
+						}
+
+						if(mind > max_mind) {
+							max_mind = mind;
+							ppoz = k;
+						}
+					}
+				}
+
+				point3d_t &p = points[ppoz].p;
+				points[ppoz].t = true;
+
+				disks.push_back(disk(p, i, r));
+
+				bool hasOrco = false;
+				bool hasUV = false;
+				int type = 0;
+				if(!scene->startGeometry()) exit(0);
+				scene->startTriMesh(scene->getNextFreeID(), num_tri_points + 1, num_tri_points, hasOrco, hasUV, type);
+				scene->addVertex(p);
+
+				float nz_sq = n.z * n.z;
+				int cmap[3] = {0,1,2};
+				if(nz_sq < 1e-5) {
+					if(n.x * n.x < 1e-5) {
+						cmap[1] = 2;
+						cmap[2] = 1;
+					} else {
+						cmap[0] = 2;
+						cmap[2] = 0;
+					}
+					nz_sq = n[cmap[2]] * n[cmap[2]];
+				}
+				float nx = n[cmap[0]], ny = n[cmap[1]];
+
+				for(int k = 0; k < num_tri_points; k++) {
+					float beta_k = k * M_2PI / num_tri_points;
+					float cos_beta_k = cos(beta_k);
+					float sin_beta_k = sin(beta_k);
+					
+					float sak_p = (nx * cos_beta_k + ny * sin_beta_k);
+					float sinsq_alfa_k = nz_sq / ( sak_p * sak_p + nz_sq);
+
+					float sin_alfa_k = sqrt(sinsq_alfa_k);
+					float cos_alfa_k = sqrt(1 - sinsq_alfa_k);
+					float r_sin_alfa_k = r * sin_alfa_k;
+
+					tri_points[k][cmap[0]] = p[cmap[0]] + r_sin_alfa_k * cos_beta_k;
+					tri_points[k][cmap[1]] = p[cmap[1]] + r_sin_alfa_k * sin_beta_k;
+					tri_points[k][cmap[2]] = p[cmap[2]] + r * cos_alfa_k;
+
+					scene->addVertex(tri_points[k]);
+				}
+
+				for(int k = 0; k < num_tri_points; k++) {
+					scene->addTriangle(0, 1 + k, 1 + (k+1) % num_tri_points, t->getMaterial());
+				}
+				if(!scene->endTriMesh()) exit(0);
+				if(!scene->endGeometry()) exit(0);
+			}
+		}
+		for(std::vector<point3d_t>::iterator p_itr = itr->second.points.begin(); p_itr != itr->second.points.end(); ++p_itr)
+			(*p_itr) += point3d_t(3,3,3);
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	cliParser_t parse(argc, argv, 2, 1, "You need to set at least a yafaray's valid XML file.");
@@ -157,6 +310,8 @@ int main(int argc, char *argv[])
 	
 	bool success = parse_xml_file(xmlFile.c_str(), scene, env, render);
 	if(!success) exit(1);
+
+	test(scene);
 	
 	int width=320, height=240;
 	render.getParam("width", width); // width of rendered image

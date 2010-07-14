@@ -32,9 +32,6 @@
 #include <yafraycore/spectrum.h>
 #include <integrators/integr_utils.h>
 #include <sstream>
-#include <yafraycore/triangle.h>
-#include <yafraycore/meshtypes.h>
-#include <limits>
 
 __BEGIN_YAFRAY
 
@@ -118,109 +115,6 @@ bool pathIntegrator_t::preprocess()
 	}
 	
 	settings = set.str();
-
-	scene_t *new_scene = new scene_t;
-
-	int max_to_generate = 32000;
-	struct ptd {
-		point3d_t p;
-		bool t;
-	};
-	std::vector<ptd> points;
-	points.resize(max_to_generate);
-
-	struct disk
-	{
-		point3d_t p;
-		int n_idx;
-		float r;
-		disk(const point3d_t &p, int n_idx, float r) : p(p), n_idx(n_idx), r(r) {}
-	};
-
-	std::vector<vector3d_t> normals;
-	std::vector<disk> disks;
-
-	int num_tri_points = 20;
-	std::vector<point3d_t> tri_points;
-	tri_points.resize(num_tri_points);
-
-	scene_t::objDataArray_t &meshes = scene->getMeshes();
-	for(scene_t::objDataArray_t::iterator itr = meshes.begin(); itr != meshes.end(); ++itr) {
-		triangleObject_t *obj = itr->second.obj;
-		int nt = obj->numPrimitives();
-		const triangle_t **tris = new const triangle_t*[nt];
-		itr->second.obj->getPrimitives(tris);
-		for(int i = 0; i < nt; ++i) {
-			const triangle_t *t = tris[i];
-			point3d_t a, b, c;
-			t->getVertices(a, b, c);
-			normals.push_back(t->getNormal());
-			
-			vector3d_t ab = b - a, ac = c - a;
-			float area = 0.5 * (ab ^ ac).length();
-
-			// TODO: compute these from the area
-			int nr_to_generate = 50;
-			int nr_to_keep = 10;
-			
-			
-			for(int j = 0; j < nr_to_generate; j++)
-			{
-				float u = ourRandom();
-				float v = ourRandom();
-				points[i].p = a + u * ab + v * ac; 
-				points[i].t = false;
-			}
-
-			for(int j = 0; j < nr_to_keep; j++)
-			{
-				int ppoz = 0;
-				float mind = std::numeric_limits<float>::max();
-
-				for(int k = 0; k < nr_to_generate; k++)
-				{
-					if(!points[k].t)
-					{
-						// TODO: avoid computing the distances more than once
-						for(int l = 0; l < j; l++) {
-							float d = (points[k].p - disks[l].p).lengthSqr();
-							if(d < mind) {
-								mind = d;
-								ppoz = k;
-							}
-						}
-					}
-				}
-
-				point3d_t &p = points[ppoz].p;
-
-				// TODO: determine this from the area
-				float r = 10;
-				disks.push_back(disk(p, i, r));
-
-				vector3d_t &n = normals[i];
-				for(int j = 0; j < num_tri_points; j++) {
-					float beta_j = j * M_2PI / num_tri_points;
-					float cos_beta_j = cos(beta_j);
-					float sin_beta_j = sin(beta_j);
-
-					float saj_p = (n.x * cos_beta_j + n.y * sin_beta_j);
-					float nz_sq = n.z * n.z;
-					float sinsq_alfa_j = nz_sq / ( saj_p * saj_p + nz_sq);
-					float sin_alfa_j = sqrt(sinsq_alfa_j);
-					float cos_alfa_j = sqrt(1 - sinsq_alfa_j);
-
-					float r_sin_alfa_j = r * sin_alfa_j;
-					
-					tri_points[j] = point3d_t(
-						p.x + r_sin_alfa_j * cos_beta_j,
-						p.y + r_sin_alfa_j * sin_beta_j,
-						p.z + r * cos_alfa_j
-					);
-				}
-			}
-		}
-	}
 
 	return success;
 }
