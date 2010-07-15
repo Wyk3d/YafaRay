@@ -59,15 +59,26 @@ class DiskTessellator
 				float sin_beta_k = sin(beta_k);
 
 				float sak_p = (nx * cos_beta_k + ny * sin_beta_k);
-				float sinsq_alfa_k = nz_sq / ( sak_p * sak_p + nz_sq);
+				float sak_d = ( sak_p * sak_p + nz_sq);
+				if(sak_d < 1e-5) {
+					Y_ERROR << "division by zero warning";
+				}
+				float sinsq_alfa_k = nz_sq / sak_d;
+				//float sinsq_alfa_k = nz_sq / ( sak_p * sak_p + nz_sq);
 
 				float sin_alfa_k = sqrt(sinsq_alfa_k);
 				float cos_alfa_k = sqrt(1 - sinsq_alfa_k);
 				float r_sin_alfa_k = r * sin_alfa_k;
 
-				tri_points[k][cmap[0]] = p[cmap[0]] + r_sin_alfa_k * cos_beta_k;
-				tri_points[k][cmap[1]] = p[cmap[1]] + r_sin_alfa_k * sin_beta_k;
-				tri_points[k][cmap[2]] = p[cmap[2]] + r * cos_alfa_k;
+				point3d_t &q = tri_points[k];
+				q[cmap[0]] = p[cmap[0]] + r_sin_alfa_k * cos_beta_k;
+				q[cmap[1]] = p[cmap[1]] + r_sin_alfa_k * sin_beta_k;
+				q[cmap[2]] = p[cmap[2]] + r * cos_alfa_k;
+
+				float cos_n = (q-p) * n / r;
+				if(abs(cos_n) > 0.01) {
+					Y_ERROR << "cos_n is " << cos_n << yendl;
+				}
 			}
 		}
 };
@@ -106,8 +117,11 @@ class DiskSceneTessellator : public DiskTessellator
 					scene->addTriangle(0, 1 + k, 1 + (k+1) % points_per_tri, mat); 
 				} else if(-cos_n >= similarity_threshold) {
 					scene->addTriangle(0, 1 + (k+1) % points_per_tri, 1 + k, mat);
-				} else {
-					Y_ERROR << "invalid normal found for triangle\n";
+				else {
+					Y_ERROR << "invalid triangle normal - similarity between "
+						<< "(" << n.x << "," << n.y << "," << n.z << ") and "
+						<< "(" << gn.y << "," << gn.z << "," << gn.z << ") "
+						<< "is |" << cos_n << "| < " << similarity_threshold << yendl;
 				}
 			}
 
@@ -252,7 +266,7 @@ class BestCandidateSampler {
 		void gen_candidates(PointGenFunc gen_functor, int nr_to_keep, int nr_to_generate = -1) {
 			this->nr_to_keep = nr_to_keep;
 			if(nr_to_generate < 0) {
-				nr_to_generate = nr_to_keep * 10;
+				nr_to_generate = nr_to_keep * 5;
 			}
 			this->nr_to_generate = nr_to_generate;
 
@@ -311,19 +325,67 @@ class BestCandidateSampler {
 		}
 };
 
+
+struct disk
+{
+	point3d_t p;
+	int n_idx;
+	float r;
+	const material_t *mat;
+	disk(const material_t *mat, const point3d_t &p, int n_idx, float r) : mat(mat), p(p), n_idx(n_idx), r(r) {}
+};
+
+typedef std::vector<disk> DiskVectorType;
+
+void build_disk_hierarchy(DiskVectorType &v, int s, int e) {
+	if(s >= e - 1)		// no need to sort single point
+		return;
+
+	float max_c[3], min_c[3];
+	for(int i = 0; i < 3; i++) {
+		max_c[i] = std::numeric_limits<float>::min();
+		min_c[i] = std::numeric_limits<float>::max();
+	}
+
+	for(int poz = s; poz < e; poz++) {
+		point3d_t &p = v[poz].p;
+		for(int i = 0; i < 3; i++) {
+			if(p[i] < min_c[i]) min_c[i] = p[i];
+			if(p[i] > max_c[i]) max_c[i] = p[i];
+		}
+	}
+
+	float max_ex = std::numeric_limits<float>::min();
+	int ex = 0;
+	for(int i = 0; i < 3; i++) {
+		float exi = max_c[i] - min_c[i];
+		if(exi > max_ex) {
+			max_ex = exi;
+			ex = i;
+		}
+	}
+
+	struct CoordinateComparator
+	{
+		int coord;
+		CoordinateComparator(int coord) :
+			coord(coord) {}
+		bool operator()(const disk& a, const disk &b) {
+			return a.p[coord] < b.p[coord];
+		}
+	} comp(ex);
+
+	std::sort(v.begin() + s, v.begin() + e, comp);
+
+	build_disk_hierarchy(v, s, (s+e)/2);
+	build_disk_hierarchy(v, (s+e)/2 + 1, e);
+}
+
 void test(scene_t *scene) {
 
-	struct disk
-	{
-		point3d_t p;
-		int n_idx;
-		float r;
-		const material_t *mat;
-		disk(const material_t *mat, const point3d_t &p, int n_idx, float r) : mat(mat), p(p), n_idx(n_idx), r(r) {}
-	};
 
 	std::vector<vector3d_t> normals;
-	std::vector<disk> disks;
+	DiskVectorType disks;
 
 	scene_t::objDataArray_t &meshes = scene->getMeshes();
 	for(scene_t::objDataArray_t::iterator itr = meshes.begin(); itr != meshes.end(); ++itr)
@@ -337,15 +399,25 @@ void test(scene_t *scene) {
 			const triangle_t *t = tris[i];
 			point3d_t a, b, c;
 			t->getVertices(a, b, c);
-			normals.push_back(t->getNormal());
+			vector3d_t n = t->getNormal();
+			if(n.lengthSqr() < 1.0 - 1e-5) {
+				Y_ERROR << "found triangle " 
+					<< "(" << a.x << "," << a.y << "," << a.z << "), "
+					<< "(" << b.x << "," << b.y << "," << b.z << "), "
+					<< "(" << c.x << "," << c.y << "," << c.z << ") "
+					<< "with invalid normal "
+					<< "(" << n.x << "," << n.y << "," << n.z << ")" << yendl;
+				continue;
+			}
+			normals.push_back(n);
 			
 			vector3d_t ab = b - a, ac = c - a;
 			float area = 0.5 * (ab ^ ac).length();
 
 			float r = 0.1;
-			float area_multiplier = 2*sqrt(2.0);
+			//float area_multiplier = 2*sqrt(2.0);
+			float area_multiplier = 1;
 			int nr_to_keep = std::max((int)(area * area_multiplier / (r*r*M_PI)), 1);
-			int nr_to_generate = nr_to_keep * 10;
 			printf("radius: %f\n");
 
 			BestCandidateSampler sampler;
@@ -366,13 +438,15 @@ void test(scene_t *scene) {
 				}
 			} gen_func(a, ab, ac);
 			
-			sampler.gen_candidates(gen_func, nr_to_keep, nr_to_generate);
+			sampler.gen_candidates(gen_func, nr_to_keep);
 			sampler.gen_samples();
 
 			for(BestCandidateSampler::iterator itr = sampler.begin(); itr != sampler.end(); ++itr)
 				disks.push_back(disk(t->getMaterial(), (*itr), i, r));
 		}
 	}
+
+	build_disk_hierarchy(disks, 0, (int)disks.size());
 
 	// displace the original scene out of view to show only the current scene
 	// TODO: create a new scene or remove the meshes from the original scene
