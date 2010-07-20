@@ -14,6 +14,7 @@ option(DEBUG_BUILD "Enable debug build mode" OFF)
 option(WITH_TESTS "Enable building test applications for various components of Yafaray" OFF)
 option(TESTS_ONLY "Build only the test applications, not the rest of the core (implies WITH_TESTS)" OFF)
 option(WITH_OPENCL "Enable the use of OpenCL and GPU accelerated rendering where avaialble" OFF)
+option(WITH_GUI "Enable building the QT GUI " OFF)
 
 ###### Packages and Definitions #########
 
@@ -45,10 +46,13 @@ find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(Freetype REQUIRED)
 find_package(Threads REQUIRED)
-find_package(Qt4 4.4.0 COMPONENTS QtCore QtGui REQUIRED)
 
-# Qt enabling header
-include(${QT_USE_FILE})
+if(WITH_GUI)
+	find_package(Qt4 4.4.0 COMPONENTS QtCore QtGui REQUIRED)
+
+	# Qt enabling header
+	include(${QT_USE_FILE})
+endif(WITH_GUI)
 
 #check for swig if needed
 if (WITH_YAF_PY_BINDINGS OR WITH_YAF_RUBY_BINDINGS)
