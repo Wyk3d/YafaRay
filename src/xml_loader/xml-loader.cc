@@ -328,18 +328,24 @@ class BestCandidateSampler {
 
 struct disk
 {
-	point3d_t p;
-	int n_idx;
-	float r;
-	const material_t *mat;
-	disk(const material_t *mat, const point3d_t &p, int n_idx, float r) : mat(mat), p(p), n_idx(n_idx), r(r) {}
+	point3d_t c;	// center of the disk
+	int n_idx;		// normal index
+	float r;		// disk radius
+	float br;		// bounding sphere radius in the hierarchy
+	point3d_t bc;   // center of the bounding sphere
+	const material_t *mat;	
+	disk(const material_t *mat, const point3d_t &c, int n_idx, float r) : mat(mat), c(c), n_idx(n_idx), r(r) {}
 };
 
 typedef std::vector<disk> DiskVectorType;
 
 void build_disk_hierarchy(DiskVectorType &v, int s, int e) {
-	if(s >= e - 1)		// no need to sort single point
+	if(s >= e - 1) {
+		if(s == e-1) {
+			v[s].br = v[s].r;
+		}	
 		return;
+	}
 
 	float max_c[3], min_c[3];
 	for(int i = 0; i < 3; i++) {
@@ -348,7 +354,7 @@ void build_disk_hierarchy(DiskVectorType &v, int s, int e) {
 	}
 
 	for(int poz = s; poz < e; poz++) {
-		point3d_t &p = v[poz].p;
+		point3d_t &p = v[poz].c;
 		for(int i = 0; i < 3; i++) {
 			if(p[i] < min_c[i]) min_c[i] = p[i];
 			if(p[i] > max_c[i]) max_c[i] = p[i];
@@ -371,19 +377,38 @@ void build_disk_hierarchy(DiskVectorType &v, int s, int e) {
 		CoordinateComparator(int coord) :
 			coord(coord) {}
 		bool operator()(const disk& a, const disk &b) {
-			return a.p[coord] < b.p[coord];
+			return a.c[coord] < b.c[coord];
 		}
 	} comp(ex);
 
-	std::sort(v.begin() + s, v.begin() + e, comp);
+	int m = (s+e)/2;
 
-	build_disk_hierarchy(v, s, (s+e)/2);
-	build_disk_hierarchy(v, (s+e)/2 + 1, e);
+	std::sort(v.begin() + s, v.begin() + e, comp);									// O(n log n)
+	//TODO: the following works iff only partitioning is required
+	//std::nth_element(v.begin() + s, v.begin() + m, v.begin() + e, comp);	// O(n)
+
+	// a range (s,e) denotes a certain subtree
+	// its root node, containing the bounding radius of the subtree is at 'm'
+	// the radius is computed as the bound of the subtrees
+	// (0,m) and (m+1, e)
+
+	build_disk_hierarchy(v, s, m);
+	build_disk_hierarchy(v, m+1, e);
+
+	disk &d = v[m];
+	disk &d1 = v[(0 + m)/2];
+	disk &d2 = v[(m+1 + e)/2];
+	
+	point3d_t &c1 = d1.bc, &c2 = d2.bc;
+	float r1 = d1.br, r2 = d2.br;
+
+	vector3d_t c21 = c2-c1;
+	float c21m = c21.length();
+	d.br = (c21m+r1+r2)/2;
+	d.bc = c1 + c21 *( (d.br-r1)/c21m ); 
 }
 
 void test(scene_t *scene) {
-
-
 	std::vector<vector3d_t> normals;
 	DiskVectorType disks;
 
@@ -458,7 +483,7 @@ void test(scene_t *scene) {
 	DiskSceneTessellator tes(scene, 10);
 
 	for(std::vector<disk>::iterator itr = disks.begin(); itr != disks.end(); ++itr) {
-		tes.tessellate(itr->mat, itr->p, itr->r, normals[itr->n_idx]);
+		tes.tessellate(itr->mat, itr->c, itr->r, normals[itr->n_idx]);
 	}
 }
 
