@@ -117,7 +117,7 @@ class DiskSceneTessellator : public DiskTessellator
 					scene->addTriangle(0, 1 + k, 1 + (k+1) % points_per_tri, mat); 
 				} else if(-cos_n >= similarity_threshold) {
 					scene->addTriangle(0, 1 + (k+1) % points_per_tri, 1 + k, mat);
-				else {
+				} else {
 					Y_ERROR << "invalid triangle normal - similarity between "
 						<< "(" << n.x << "," << n.y << "," << n.z << ") and "
 						<< "(" << gn.y << "," << gn.z << "," << gn.z << ") "
