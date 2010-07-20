@@ -41,6 +41,7 @@ class YAFRAYCORE_EXPORT integrator_t
 	public:
 		//! this MUST be called before any other member function!
 		void setScene(scene_t *s) { scene=s; }
+		virtual void onSceneUpdate() {} // called before the scene is updated
 		/*! do whatever is required to render the image, if suitable for integrating whole image */
 		virtual bool render(imageFilm_t *imageFilm) { return false; }
 		virtual void setProgressBar(progressBar_t *pb) { intpb = pb; }

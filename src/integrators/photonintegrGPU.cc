@@ -1145,6 +1145,10 @@ void photonIntegratorGPU_t::generate_points(NormalVectorType &normals, DiskVecto
 
 }
 
+void photonIntegratorGPU_t::onSceneUpdate() {
+
+}
+
 extern "C"
 {
 

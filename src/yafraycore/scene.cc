@@ -657,6 +657,10 @@ bool scene_t::update()
 {
 	Y_INFO << "Scene: Mode \"" << ((mode == 0) ? "Triangle" : "Universal" ) << "\"" << yendl;
 	if(!camera || !imageFilm) return false;
+
+	if(surfIntegrator)
+		surfIntegrator->onSceneUpdate();
+
 	if(state.changes & C_GEOM)
 	{
 		if(tree) delete tree;
