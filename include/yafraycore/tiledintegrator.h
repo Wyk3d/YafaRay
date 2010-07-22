@@ -26,6 +26,46 @@ class YAFRAYCORE_EXPORT tiledIntegrator_t: public surfaceIntegrator_t
 		
 		virtual void recursiveRaytrace(renderState_t &state, diffRay_t &ray, int rDepth, BSDF_t bsdfs, surfacePoint_t &sp, vector3d_t &wo, color_t &col, float &alpha) const;
 		virtual void precalcDepths();
+
+		friend class PrimaryRayGenerator;
+		friend class RenderTile_PrimaryRayGenerator;
+
+		class YAFRAYCORE_EXPORT PrimaryRayGenerator
+		{
+			protected:
+				tiledIntegrator_t *integrator;
+				renderArea_t &area;
+				int n_samples, offset;
+				scene_t *scene;
+				const camera_t* camera;
+				renderState_t rstate;
+			public:
+				PrimaryRayGenerator(
+					renderArea_t &a, int n_samples, int offset, 
+					tiledIntegrator_t *integrator, random_t &prng
+				);
+				virtual bool skipPixel(int i, int j) = 0;
+				virtual void onCameraRayMissed(int i, int j, int dx, int dy) = 0;
+				virtual void rays(diffRay_t &c_ray, ray_t &d_ray, int i, int j, int dx, int dy, float wt) = 0;
+				void genRays();
+		};
+
+		class YAFRAYCORE_EXPORT RenderTile_PrimaryRayGenerator : public tiledIntegrator_t::PrimaryRayGenerator
+		{
+			private:
+				bool adaptive, threadID;
+				bool do_depth;
+				imageFilm_t *imageFilm;
+			public:
+				RenderTile_PrimaryRayGenerator(
+					renderArea_t &a, int n_samples, int offset,
+					bool adaptive, int threadID, 
+					tiledIntegrator_t *integrator, random_t &prng
+				);
+				bool skipPixel(int i, int j);
+				void onCameraRayMissed(int i, int j, int dx, int dy);
+				void rays(diffRay_t &c_ray, ray_t &d_ray, int i, int j, int dx, int dy, float wt);
+		};
 	
 	protected:
 		int AA_samples, AA_passes, AA_inc_samples;
@@ -34,7 +74,6 @@ class YAFRAYCORE_EXPORT tiledIntegrator_t: public surfaceIntegrator_t
 		imageFilm_t *imageFilm;
 		float maxDepth; //!< Inverse of max depth from camera within the scene boundaries
 		float minDepth; //!< Distance between camera and the closest object on the scene
-
 };
 
 #ifdef USING_THREADS

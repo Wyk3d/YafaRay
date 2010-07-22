@@ -1142,7 +1142,14 @@ void photonIntegratorGPU_t::generate_points(NormalVectorType &normals, DiskVecto
 				disks.push_back(disk(t->getMaterial(), (*itr), i, r));
 		}
 	}
+}
 
+bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID)
+{
+	random_t prng(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
+	RenderTile_PrimaryRayGenerator raygen(a, n_samples, offset, adaptive, threadID, this, prng);
+	raygen.genRays();
+	return true;
 }
 
 void photonIntegratorGPU_t::onSceneUpdate() {

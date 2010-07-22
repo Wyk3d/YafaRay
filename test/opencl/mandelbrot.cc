@@ -119,15 +119,15 @@ const char *kernel_source = CL_SRC(
 			Z_re = Z_re2 - Z_im2 + c_re;
 		}
 
-		buffer(CLK_LOCAL_MEM_FENCE);
+		barrier(CLK_LOCAL_MEM_FENCE);
 
 		a[x + y * ct.w] = n;
 	}
 );
 
-void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
+void doMandelbrotOCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 	CLError err;
-	unsigned *a = new cl_uint[w*h];
+	cl_uint *a = new cl_uint[w*h];
 	memset(a, 0, w*h*sizeof(cl_uint));
 
 	CLBuffer *buf_a = context->createBuffer(CL_MEM_READ_WRITE, w*h*sizeof(cl_uint), NULL, &err);
@@ -184,7 +184,7 @@ void doOpenCL(CLDevice device, CLContext *context, CLCommandQueue *queue) {
 }
 
 void doOpenCL() {
-	runOCL( &doOpenCL );
+	runOCL( &doMandelbrotOCL );
 }
 
 imageHandler_t *createHandler(std::string name, std::string type, int width, int height)
@@ -238,7 +238,7 @@ int main() {
 	end = clock();
 	printf("OpenCL time: %f\n", (end-start)/(float)CLOCKS_PER_SEC);
 
-	//checkDiff();
+	checkDiff();
 
 	handler->saveToFile("mandelbrotOCL.jpg");
 

@@ -14,7 +14,7 @@ option(DEBUG_BUILD "Enable debug build mode" OFF)
 option(WITH_TESTS "Enable building test applications for various components of Yafaray" OFF)
 option(TESTS_ONLY "Build only the test applications, not the rest of the core (implies WITH_TESTS)" OFF)
 option(WITH_OPENCL "Enable the use of OpenCL and GPU accelerated rendering where avaialble" OFF)
-option(WITH_GUI "Enable building the QT GUI " OFF)
+option(WITH_GUI "Enable building the QT GUI " ON)
 
 ###### Packages and Definitions #########
 
