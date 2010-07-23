@@ -74,6 +74,9 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		BSDF_t allBSDFIntersect;
 		friend class prepassWorker_t;
 		bool hasBGLight;
+
+		friend class RayStorer;
+		std::vector<diffRay_t> c_rays;
 };
 
 __END_YAFRAY

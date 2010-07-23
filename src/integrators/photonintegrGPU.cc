@@ -876,6 +876,27 @@ color_t photonIntegratorGPU_t::finalGathering(renderState_t &state, const surfac
 
 colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) const
 {
+	const diffRay_t &orig_ray = c_rays[ray.idx];
+	float from_diff = (ray.from - orig_ray.from).length();
+	float xfrom_diff = (ray.xfrom - orig_ray.xfrom).length();
+	float yfrom_diff = (ray.yfrom - orig_ray.yfrom).length();
+
+	float dir_diff = 1.0 - (ray.dir * orig_ray.dir) / ray.dir.length() / orig_ray.dir.length();
+	float xdir_diff = 1.0 - (ray.xdir * orig_ray.xdir) / ray.xdir.length() / orig_ray.xdir.length();
+	float ydir_diff = 1.0 - (ray.ydir * orig_ray.ydir) / ray.ydir.length() / orig_ray.ydir.length();
+
+	bool hasDif_diff = ray.hasDifferentials != orig_ray.hasDifferentials;
+
+	float tmin_diff = fabs(ray.tmin - orig_ray.tmin);
+	float tmax_diff = fabs(ray.tmax - orig_ray.tmax);
+	float time_diff = fabs(ray.time - orig_ray.time);
+	if(from_diff > 1e-5 || yfrom_diff > 1e-5 || xfrom_diff > 1e-5 ||
+		dir_diff > 1e-5 || xdir_diff > 1e-5 || ydir_diff > 1e-5 || 
+		hasDif_diff ||
+		time_diff > 1e-5 || tmax_diff > 1e-5 || tmin_diff > 1e-5) {
+		Y_ERROR << "different ray parameters" << yendl;
+	}
+
 	static int _nMax=0;
 	static int calls=0;
 	++calls;
@@ -1146,9 +1167,33 @@ void photonIntegratorGPU_t::generate_points(NormalVectorType &normals, DiskVecto
 
 bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID)
 {
-	random_t prng(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-	RenderTile_PrimaryRayGenerator raygen(a, n_samples, offset, adaptive, threadID, this, prng);
-	raygen.genRays();
+	class RayStorer : public tiledIntegrator_t::PrimaryRayGenerator {
+		public:
+			RayStorer(
+				renderArea_t &a, int n_samples, int offset, 
+				tiledIntegrator_t *integrator, random_t &prng
+			) : PrimaryRayGenerator(a, n_samples, offset, integrator, prng) 
+			{
+
+			}
+			photonIntegratorGPU_t *parent() {
+				return (photonIntegratorGPU_t*)integrator;
+			}
+			void rays(diffRay_t &c_ray, int i, int j, int dx, int dy, float wt)
+			{
+				parent()->c_rays.push_back(c_ray);
+			}
+	};
+
+	c_rays.clear();
+
+	random_t prng_rs(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
+	RayStorer rs(a, n_samples, offset, this, prng_rs);
+	rs.genRays();
+
+	random_t prng_rt(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
+	RenderTile_PrimaryRayGenerator raygen_rt(a, n_samples, offset, adaptive, threadID, this, prng_rt);
+	raygen_rt.genRays();
 	return true;
 }
 

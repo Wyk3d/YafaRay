@@ -352,6 +352,8 @@ void tiledIntegrator_t::PrimaryRayGenerator::genRays()
 	PFLOAT wt, wt_dummy;
 	int pass_offs = offset;
 
+	int c_ray_idx = 0;
+
 	int x = camera->resX(), y = camera->resY();
 	int end_x = area.X + area.W;
 	int end_y = area.Y + area.H;
@@ -405,8 +407,9 @@ void tiledIntegrator_t::PrimaryRayGenerator::genRays()
 				c_ray.ydir = d_ray.dir;
 				c_ray.time = rstate.time;
 				c_ray.hasDifferentials = true;
+				c_ray.idx = c_ray_idx++;
 
-				rays(c_ray, d_ray, i, j, dx, dy, wt);
+				rays(c_ray, i, j, dx, dy, wt);
 			}
 		}
 	}
@@ -441,7 +444,7 @@ void tiledIntegrator_t::RenderTile_PrimaryRayGenerator::onCameraRayMissed(
 }
 
 void tiledIntegrator_t::RenderTile_PrimaryRayGenerator::rays(
-	diffRay_t &c_ray, ray_t &d_ray, int i, int j, int dx, int dy, float wt
+	diffRay_t &c_ray, int i, int j, int dx, int dy, float wt
 ) {
 	// col = T * L_o + L_v
 	colorA_t col = integrator->integrate(rstate, c_ray); // L_o

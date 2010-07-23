@@ -44,9 +44,9 @@ class YAFRAYCORE_EXPORT tiledIntegrator_t: public surfaceIntegrator_t
 					renderArea_t &a, int n_samples, int offset, 
 					tiledIntegrator_t *integrator, random_t &prng
 				);
-				virtual bool skipPixel(int i, int j) = 0;
-				virtual void onCameraRayMissed(int i, int j, int dx, int dy) = 0;
-				virtual void rays(diffRay_t &c_ray, ray_t &d_ray, int i, int j, int dx, int dy, float wt) = 0;
+				virtual bool skipPixel(int i, int j) { return false; }
+				virtual void onCameraRayMissed(int i, int j, int dx, int dy) { }
+				virtual void rays(diffRay_t &c_ray, int i, int j, int dx, int dy, float wt) = 0;
 				void genRays();
 		};
 
@@ -64,7 +64,7 @@ class YAFRAYCORE_EXPORT tiledIntegrator_t: public surfaceIntegrator_t
 				);
 				bool skipPixel(int i, int j);
 				void onCameraRayMissed(int i, int j, int dx, int dy);
-				void rays(diffRay_t &c_ray, ray_t &d_ray, int i, int j, int dx, int dy, float wt);
+				void rays(diffRay_t &c_ray, int i, int j, int dx, int dy, float wt);
 		};
 	
 	protected:
