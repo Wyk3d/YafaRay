@@ -345,12 +345,12 @@ bool photonIntegratorGPU_t::preprocess()
 	CLError err;
 	int d_int_nodes_size = int_nodes.size() * sizeof(PHInternalNode);
 	CLBuffer *d_int_nodes = context->createBuffer(CL_MEM_READ_WRITE, d_int_nodes_size, NULL, &err);
-	checkErr(err, "failed to create internal node buffer");
+	checkErr(err || !d_int_nodes, "failed to create internal node buffer");
 	queue->writeBuffer(d_int_nodes, 0, d_int_nodes_size, &int_nodes[0], &err);
 
 	int d_leaves_size = leaves.size() * sizeof(PHInternalNode);
 	CLBuffer *d_leaves = context->createBuffer(CL_MEM_READ_WRITE, d_leaves_size, NULL, &err);
-	checkErr(err, "failed to create leaf buffer");
+	checkErr(err || !d_leaves, "failed to create leaf buffer");
 	queue->writeBuffer(d_leaves, 0, d_leaves_size, &leaves[0], &err);
 
 	char * kernel_src = CL_SRC(
@@ -369,13 +369,53 @@ bool photonIntegratorGPU_t::preprocess()
 
 		__kernel void test(__global PHInternalNode *int_nodes, 
 						   __global PHLeaf *leaves,
-						   int nr_int_nodes)  {
-			
+						   int nr_int_nodes,
+						   __global float *ret)  {
+			float total = 0;
+			for(int i = 0; i < nr_int_nodes; ++i) {
+				total += int_nodes[i].r;
+			}
+
+			ret[0] = total;
 		}
 	);
 
 	CLProgram *program = buildCLProgram(kernel_src, context, device);
+	checkErr(err || !program, "failed to build program");
 	
+	{
+		CLKernel *kernel = program->createKernel("test", &err);
+		checkErr(err || !kernel, "failed to create kernel");
+
+		float ret = 0;
+		CLBuffer *d_ret = context->createBuffer(CL_MEM_READ_WRITE, sizeof(float), NULL, &err);
+		checkErr(err || !d_ret, "failed to create ret buf");
+
+		queue->writeBuffer(d_ret, 0, sizeof(float), &ret, &err);
+		checkErr(err, "failed to init ret");
+
+		ret = -1;
+
+		float comp = 0;
+		for(int i = 0; i < int_nodes.size(); ++i) {
+			comp += int_nodes[i].r;
+		}
+
+		kernel->setArgs(d_int_nodes, d_leaves, nr_internal_nodes, d_ret, &err);
+		checkErr(err, "failed to set kernel arguments");
+
+		queue->runKernel(kernel, Range1D(1,1), &err);
+		checkErr(err, "failed to run kernel");
+
+		queue->readBuffer(d_ret, 0, sizeof(float), &ret, &err);
+		checkErr(err, "failed to read buffer");
+
+		d_ret->free(&err);
+		checkErr(err, "failed to free d_ret");
+
+		kernel->free(&err);
+		checkErr(err, "failed to free kernel");
+	}
 
 
 	program->free(&err);
