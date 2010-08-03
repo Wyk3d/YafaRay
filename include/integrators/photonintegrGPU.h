@@ -17,7 +17,7 @@
 #include <yafraycore/spectrum.h>
 #include <utilities/sample_utils.h>
 #include <integrators/integr_utils.h>
-
+#include <opencl_wrapper/cl_wrapper.h>
 
 __BEGIN_YAFRAY
 
@@ -31,29 +31,48 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		static integrator_t* factory(paraMap_t &params, renderEnvironment_t &render);
 		void onSceneUpdate();
 
-
-		struct disk
+		struct PHLeaf
 		{
-			point3d_t c;	// center of the disk
-			int n_idx;		// normal index
-			float r;		// disk radius
-			float br;		// bounding sphere radius in the hierarchy
-			point3d_t bc;   // center of the bounding sphere
-			const material_t *mat;	
-			disk(const material_t *mat, const point3d_t &c, int n_idx, float r) : mat(mat), c(c), n_idx(n_idx), r(r) {}
+			point3d_t c;	// disk center
+			vector3d_t n;	// disk normal
+			int mat_type;	// disk material type
+			PHLeaf() {}
+			PHLeaf(const point3d_t &c, const vector3d_t &n, int mat_type)
+				: c(c), n(n), mat_type(mat_type) {}
 		};
 
-		typedef std::vector<disk> DiskVectorType;
+		struct PHInternalNode
+		{
+			point3d_t c;	// bounding sphere center
+			float r;		// bounding sphere radius
+			PHInternalNode() {}
+			PHInternalNode(const point3d_t &c, float r) 
+				: c(c), r(r) {}
+		};
+
+		struct Disk
+		{
+			point3d_t c;
+			const triangle_t *t;
+			Disk() {}
+			Disk(point3d_t c, const triangle_t *t)
+				: c(c), t(t) {}
+		};
+
+		typedef std::vector<Disk> DiskVectorType;
 		typedef std::vector<vector3d_t> NormalVectorType;
 
-		void build_disk_hierarchy(DiskVectorType &v, int s, int e);
-		void generate_points(NormalVectorType &normals, DiskVectorType disks, scene_t *scene);
+		void build_disk_hierarchy(std::vector<PHInternalNode> &int_nodes, std::vector<PHLeaf> &leaves, int node_poz, DiskVectorType &v, int s, int e, float leaf_radius);
+		void generate_points(NormalVectorType &normals, DiskVectorType &disks, scene_t *scene, float r);
 
 		bool renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID);
 
 	protected:
 		color_t finalGathering(renderState_t &state, const surfacePoint_t &sp, const vector3d_t &wo) const;
 		color_t estimateOneDirect(renderState_t &state, const surfacePoint_t &sp, vector3d_t wo, const std::vector<light_t *>  &lights, int d1, int n)const;
+
+		CLDevice getOpenCLDevice();
+		CLPlatform getOpenCLPlatform();
 		
 		background_t *background;
 		bool trShad;
@@ -77,6 +96,11 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 
 		friend class RayStorer;
 		std::vector<diffRay_t> c_rays;
+
+		CLPlatform platform;
+		CLDevice device;
+		CLContext *context;
+		CLCommandQueue *queue;
 };
 
 __END_YAFRAY

@@ -9,8 +9,9 @@ add_library(photonmap SHARED photonintegr.cc common.cc)
 target_link_libraries(photonmap yafaraycore)
 
 if(WITH_OPENCL)
+	include_directories(${OPENCL_INCLUDE_DIR})
 	add_library(photonmapGPU SHARED photonintegrGPU.cc common.cc)
-	target_link_libraries(photonmapGPU yafaraycore)
+	target_link_libraries(photonmapGPU yafaraycore opencl_wrapper)
 	install (TARGETS photonmapGPU ${YAF_TARGET_TYPE} DESTINATION ${YAF_PLUGIN_DIR})
 endif(WITH_OPENCL)
 

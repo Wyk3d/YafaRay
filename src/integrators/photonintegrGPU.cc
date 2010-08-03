@@ -24,12 +24,13 @@
 #include <yafraycore/best_candidate.h>
 #include <sstream>
 #include <limits>
-
+#include <opencl_wrapper/cl_util.h>
 
 __BEGIN_YAFRAY
 
 photonIntegratorGPU_t::photonIntegratorGPU_t(unsigned int dPhotons, unsigned int cPhotons, bool transpShad, int shadowDepth, float dsRad, float cRad):
-	trShad(transpShad), finalGather(true), nPhotons(dPhotons), nCausPhotons(cPhotons), sDepth(shadowDepth), dsRadius(dsRad), cRadius(cRad)
+	trShad(transpShad), finalGather(true), nPhotons(dPhotons), nCausPhotons(cPhotons), sDepth(shadowDepth), dsRadius(dsRad), cRadius(cRad),
+	platform(getOpenCLPlatform()), device(getOpenCLDevice())
 {
 	type = SURFACE;
 	rDepth = 6;
@@ -39,6 +40,13 @@ photonIntegratorGPU_t::photonIntegratorGPU_t(unsigned int dPhotons, unsigned int
 	integratorName = "PhotonMapGPU";
 	integratorShortName = "PMG";
 	hasBGLight = false;
+
+	CLError err;
+	context = platform.createContext(device, &err);
+	checkErr(err || context == NULL, "failed to get a context for the chosen device\n");
+
+	queue = context->createCommandQueue(device, &err);
+	checkErr(err || queue == NULL, "failed to create command queue");
 }
 
 struct preGatherData_t
@@ -118,6 +126,11 @@ void preGatherWorker_t::body()
 
 photonIntegratorGPU_t::~photonIntegratorGPU_t()
 {
+	CLError err;
+	queue->free(&err);
+	checkErr(err, "failed to free queue");
+	context->free(&err);
+	checkErr(err, "failed to free context");
 }
 
 inline color_t photonIntegratorGPU_t::estimateOneDirect(renderState_t &state, const surfacePoint_t &sp, vector3d_t wo, const std::vector<light_t *>  &lights, int d1, int n)const
@@ -317,9 +330,61 @@ bool photonIntegratorGPU_t::preprocess()
 	DiskVectorType disks;
 	NormalVectorType normals;
 
-	generate_points(normals, disks, scene);
-	build_disk_hierarchy(disks, 0, (int)disks.size());
+	float r = 0.1;
+	generate_points(normals, disks, scene, 0.1);
+	int node_size = std::max(sizeof(PHInternalNode), sizeof(PHLeaf));
+	// should be max leaves = 2^h > nr disks ..
+	int h = (int)(ceil(log((double)disks.size()) / log(2.0)));
+	int nr_leaves = (1<<h);
+	int nr_internal_nodes = nr_leaves; // -1 (from the formula) +1 from position 0 not used
 	
+	std::vector<PHInternalNode> int_nodes(nr_internal_nodes);
+	std::vector<PHLeaf> leaves(nr_leaves);
+	build_disk_hierarchy(int_nodes, leaves, 1, disks, 0, (int)disks.size(), r);
+
+	CLError err;
+	int d_int_nodes_size = int_nodes.size() * sizeof(PHInternalNode);
+	CLBuffer *d_int_nodes = context->createBuffer(CL_MEM_READ_WRITE, d_int_nodes_size, NULL, &err);
+	checkErr(err, "failed to create internal node buffer");
+	queue->writeBuffer(d_int_nodes, 0, d_int_nodes_size, &int_nodes[0], &err);
+
+	int d_leaves_size = leaves.size() * sizeof(PHInternalNode);
+	CLBuffer *d_leaves = context->createBuffer(CL_MEM_READ_WRITE, d_leaves_size, NULL, &err);
+	checkErr(err, "failed to create leaf buffer");
+	queue->writeBuffer(d_leaves, 0, d_leaves_size, &leaves[0], &err);
+
+	char * kernel_src = CL_SRC(
+		typedef struct
+		{
+			float c[3];	// disk center
+			float n[3];	// disk normal
+			int mat_type;	// disk material type
+		} PHLeaf;
+
+		typedef struct
+		{
+			float c[3];	// bounding sphere center
+			float r;		// bounding sphere radius
+		} PHInternalNode;
+
+		__kernel void test(__global PHInternalNode *int_nodes, 
+						   __global PHLeaf *leaves,
+						   int nr_int_nodes)  {
+			
+		}
+	);
+
+	CLProgram *program = buildCLProgram(kernel_src, context, device);
+	
+
+
+	program->free(&err);
+	checkErr("failed to free program");
+	d_int_nodes->free(&err);
+	checkErr(err, "failed to free d_int_nodes");
+	d_leaves->free(&err);
+	checkErr(err, "failed to free d_leaves");
+
 	Y_INFO << integratorName << ": Building diffuse photon map..." << yendl;
 	
 	pb->init(128);
@@ -1040,13 +1105,21 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	return ite;
 }
 
-void photonIntegratorGPU_t::build_disk_hierarchy(DiskVectorType &v, int s, int e) {
+void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &int_nodes, std::vector<PHLeaf> &leaves, int node_poz, DiskVectorType &v, int s, int e, float leaf_radius) {
 	if(s >= e - 1) {
-		if(s == e-1) {
-			v[s].br = v[s].r;
-			v[s].bc = v[s].c;
-		}	
-		return;
+		assert(s == e-1);
+		
+		while(1) {
+			int leaf_poz = node_poz - int_nodes.size();
+			if(leaf_poz >= 0) {
+				assert(leaf_poz < leaves.size());
+				leaves[leaf_poz] = PHLeaf(v[s].c, v[s].t->getNormal(), 1);	
+				return;
+			} else {
+				int_nodes[node_poz] = PHInternalNode(v[s].c, leaf_radius);
+				node_poz *= 2;
+			}
+		}
 	}
 
 	float max_c[3], min_c[3];
@@ -1078,39 +1151,61 @@ void photonIntegratorGPU_t::build_disk_hierarchy(DiskVectorType &v, int s, int e
 		int coord;
 		CoordinateComparator(int coord) :
 		coord(coord) {}
-		bool operator()(const disk& a, const disk &b) {
+		bool operator()(const Disk& a, const Disk &b) {
 			return a.c[coord] < b.c[coord];
 		}
 	} comp(ex);
 
 	int m = (s+e)/2;
 
-	std::sort(v.begin() + s, v.begin() + e, comp);									// O(n log n)
-	//TODO: the following works iff only partitioning is required
-	//std::nth_element(v.begin() + s, v.begin() + m, v.begin() + e, comp);	// O(n)
+	//std::sort(v.begin() + s, v.begin() + e, comp);									// O(n log n)
+	//NOTE: the following works iff only partitioning is required
+	std::nth_element(v.begin() + s, v.begin() + m, v.begin() + e, comp);	// O(n)
 
-	// a range (s,e) denotes a certain subtree
-	// its root node, containing the bounding radius of the subtree is at 'm'
+	// a range [s,e) denotes a certain subtree
 	// the radius is computed as the bound of the subtrees
-	// (0,m) and (m+1, e)
+	// [0,m) and [m, e)
 
-	build_disk_hierarchy(v, s, m);
-	build_disk_hierarchy(v, m+1, e);
+	int left_poz = 2*node_poz;
+	int right_poz = 2*node_poz-1;
 
-	disk &d = v[m];
-	disk &d1 = v[(s + m)/2];
-	disk &d2 = v[(m+1 + e)/2];
+	build_disk_hierarchy(int_nodes, leaves, left_poz, v, s, m, leaf_radius);
+	build_disk_hierarchy(int_nodes, leaves, right_poz, v, m, e, leaf_radius);
 
-	point3d_t &c1 = d1.bc, &c2 = d2.bc;
-	float r1 = d1.br, r2 = d2.br;
+	float r1, r2;
+	point3d_t c1, c2;
+
+	int left_leaf_poz = left_poz - int_nodes.size();
+	if(left_leaf_poz >= 0) {	// right child is a leaf
+		PHLeaf &l = leaves[left_leaf_poz];
+		c1 = l.c;
+		r1 = leaf_radius;
+	} else {			// right child is an internal node
+		PHInternalNode &n = int_nodes[left_poz];
+		c1 = n.c;
+		r1 = n.r;
+	}
+
+	int right_leaf_poz = right_poz - int_nodes.size();
+	if(right_leaf_poz >= 0) {		// left child is a leaf
+		PHLeaf &l = leaves[right_leaf_poz];
+		c2 = l.c;
+		r2 = leaf_radius;
+	} else {			// left child is an internal node
+		PHInternalNode &n = int_nodes[right_poz];
+		c2 = n.c;
+		r2 = n.r;
+	}
 
 	vector3d_t c21 = c2-c1;
 	float c21m = c21.length();
-	d.br = (c21m+r1+r2)/2;
-	d.bc = c1 + c21 *( (d.br-r1)/c21m ); 
+
+	PHInternalNode &n =  int_nodes[node_poz];
+	n.r = (c21m+r1+r2)/2;
+	n.c = c1 + c21 *( (n.r-r1)/c21m ); 
 }
 
-void photonIntegratorGPU_t::generate_points(NormalVectorType &normals, DiskVectorType disks, scene_t *scene) {
+void photonIntegratorGPU_t::generate_points(NormalVectorType &normals, DiskVectorType &disks, scene_t *scene, float r) {
 	scene_t::objDataArray_t &meshes = scene->getMeshes();
 	for(scene_t::objDataArray_t::iterator itr = meshes.begin(); itr != meshes.end(); ++itr)
 	{
@@ -1138,7 +1233,6 @@ void photonIntegratorGPU_t::generate_points(NormalVectorType &normals, DiskVecto
 			vector3d_t ab = b - a, ac = c - a;
 			float area = 0.5 * (ab ^ ac).length();
 
-			float r = 0.1;
 			//float area_multiplier = 2*sqrt(2.0);
 			float area_multiplier = 1;
 			int nr_to_keep = std::max((int)(area * area_multiplier / (r*r*M_PI)), 1);
@@ -1166,7 +1260,7 @@ void photonIntegratorGPU_t::generate_points(NormalVectorType &normals, DiskVecto
 			sampler.gen_samples();
 
 			for(BestCandidateSampler::iterator itr = sampler.begin(); itr != sampler.end(); ++itr)
-				disks.push_back(disk(t->getMaterial(), (*itr), i, r));
+				disks.push_back(Disk((*itr), t));
 		}
 	}
 }
@@ -1205,6 +1299,21 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 
 void photonIntegratorGPU_t::onSceneUpdate() {
 
+}
+
+CLPlatform photonIntegratorGPU_t::getOpenCLPlatform() {
+	CLError err;
+	CLMain cl;
+	std::list<CLPlatform> platforms = cl.getPlatforms(&err);
+	checkErr(err || platforms.empty(), "failed to find platforms\n");
+	return *platforms.begin();
+}
+
+CLDevice photonIntegratorGPU_t::getOpenCLDevice() {
+	CLError err;
+	std::list<CLDevice> devices = platform.getDevices(&err);
+	checkErr(err || devices.empty(), "failed to find devices for the chosen platform");
+	return *devices.begin();
 }
 
 extern "C"
