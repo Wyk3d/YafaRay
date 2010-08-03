@@ -313,6 +313,12 @@ bool photonIntegratorGPU_t::preprocess()
 	int pbStep;
 	if(intpb) pb = intpb;
 	else pb = new ConsoleProgressBar_t(80);
+
+	DiskVectorType disks;
+	NormalVectorType normals;
+
+	generate_points(normals, disks, scene);
+	build_disk_hierarchy(disks, 0, (int)disks.size());
 	
 	Y_INFO << integratorName << ": Building diffuse photon map..." << yendl;
 	

@@ -1,5 +1,5 @@
 #include <yafray_config.h>
-#include "cl_wrapper.h"
+#include <opencl_wrapper/cl_wrapper.h>
 
 CLCombinedError CLError::operator||(bool error_condition)
 {
