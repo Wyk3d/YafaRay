@@ -328,10 +328,9 @@ bool photonIntegratorGPU_t::preprocess()
 	else pb = new ConsoleProgressBar_t(80);
 
 	DiskVectorType disks;
-	NormalVectorType normals;
 
 	float r = 0.1;
-	generate_points(normals, disks, scene, 0.1);
+	generate_points(disks, scene, 0.1);
 	int node_size = std::max(sizeof(PHInternalNode), sizeof(PHLeaf));
 	// should be max leaves = 2^h > nr disks ..
 	int h = (int)(ceil(log((double)disks.size()) / log(2.0)));
@@ -373,7 +372,7 @@ bool photonIntegratorGPU_t::preprocess()
 						   __global float *ret)  {
 			float total = 0;
 			for(int i = 0; i < nr_int_nodes; ++i) {
-				total += int_nodes[i].r;
+				total += int_nodes[i].r / nr_int_nodes;
 			}
 
 			ret[0] = total;
@@ -398,7 +397,7 @@ bool photonIntegratorGPU_t::preprocess()
 
 		float comp = 0;
 		for(int i = 0; i < int_nodes.size(); ++i) {
-			comp += int_nodes[i].r;
+			comp += int_nodes[i].r / int_nodes.size();
 		}
 
 		kernel->setArgs(d_int_nodes, d_leaves, nr_internal_nodes, d_ret, &err);
@@ -1207,7 +1206,7 @@ void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &in
 	// [0,m) and [m, e)
 
 	int left_poz = 2*node_poz;
-	int right_poz = 2*node_poz-1;
+	int right_poz = 2*node_poz+1;
 
 	build_disk_hierarchy(int_nodes, leaves, left_poz, v, s, m, leaf_radius);
 	build_disk_hierarchy(int_nodes, leaves, right_poz, v, m, e, leaf_radius);
@@ -1242,64 +1241,107 @@ void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &in
 
 	PHInternalNode &n =  int_nodes[node_poz];
 	n.r = (c21m+r1+r2)/2;
+	assert(n.r > 0);
 	n.c = c1 + c21 *( (n.r-r1)/c21m ); 
 }
 
-void photonIntegratorGPU_t::generate_points(NormalVectorType &normals, DiskVectorType &disks, scene_t *scene, float r) {
+void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, scene_t *scene, float r) {
 	scene_t::objDataArray_t &meshes = scene->getMeshes();
+	
+	int total_prims = 0;
+	for(scene_t::objDataArray_t::iterator itr = meshes.begin(); itr != meshes.end(); ++itr) {
+		total_prims += itr->second.obj->numPrimitives();
+	}
+
+	std::vector<const triangle_t*> tris;
+	tris.resize(total_prims);
+
+	std::vector<int> nr_to_keep;
+	nr_to_keep.resize(total_prims);
+	int tri_idx = 0;
+
+	//float area_multiplier = 2 * sqrt(2);
+	float area_multiplier = 1;
+
+	int total_nr_tmp = 0;
+	int tris_remaining = total_prims;
+
 	for(scene_t::objDataArray_t::iterator itr = meshes.begin(); itr != meshes.end(); ++itr)
 	{
 		triangleObject_t *obj = itr->second.obj;
 		int nr_mesh_primitives = obj->numPrimitives();
-		const triangle_t **tris = new const triangle_t*[nr_mesh_primitives];
-		itr->second.obj->getPrimitives(tris);
+		itr->second.obj->getPrimitives(&tris[tri_idx]);
 
 		for(int i = 0; i < nr_mesh_primitives; ++i) {
-			const triangle_t *t = tris[i];
-			point3d_t a, b, c;
-			t->getVertices(a, b, c);
+			const triangle_t *t = tris[tri_idx];
+
 			vector3d_t n = t->getNormal();
 			if(n.lengthSqr() < 1.0 - 1e-5) {
+				point3d_t a,b,c;
+				t->getVertices(a, b, c);
 				Y_ERROR << "found triangle " 
 					<< "(" << a.x << "," << a.y << "," << a.z << "), "
 					<< "(" << b.x << "," << b.y << "," << b.z << "), "
 					<< "(" << c.x << "," << c.y << "," << c.z << ") "
 					<< "with invalid normal "
 					<< "(" << n.x << "," << n.y << "," << n.z << ")" << yendl;
+				nr_to_keep[tri_idx] = 0;
+				++tri_idx;
+				--tris_remaining;
 				continue;
 			}
-			normals.push_back(n);
 
-			vector3d_t ab = b - a, ac = c - a;
-			float area = 0.5 * (ab ^ ac).length();
+			float area = t->surfaceArea();
+			float cur_nr = std::max((int)(area * area_multiplier / (r*r*M_PI)), 1);
+			total_nr_tmp += cur_nr;
+			nr_to_keep[tri_idx] = cur_nr;
+			++tri_idx;
+		}
+	}
 
-			//float area_multiplier = 2*sqrt(2.0);
-			float area_multiplier = 1;
-			int nr_to_keep = std::max((int)(area * area_multiplier / (r*r*M_PI)), 1);
-			printf("radius: %f\n");
+	int total_nr = 1;
+	while(total_nr < total_nr_tmp) total_nr *= 2;
 
-			BestCandidateSampler sampler;
+	int diff = (total_nr - total_nr_tmp);
+	int diff_per_tri = diff / tris_remaining;
+	int diff_mod = diff % tris_remaining;
+		
+	for(int i = 0; i < total_prims; ++i)
+	{
+		if(nr_to_keep[i] == 0)
+			continue;
 
-			struct PointGenFunc {
-				point3d_t &a;
-				vector3d_t &ab, &ac;
-				PointGenFunc(point3d_t &a, vector3d_t &ab, vector3d_t &ac)
-					: a(a), ab(ab), ac(ac) 
-				{
-				}
+		const triangle_t *t = tris[i];
+		int cur_nr = nr_to_keep[i] + diff_per_tri;
+		if(diff_mod > 0) {
+			diff_mod --;
+			cur_nr ++;
+		}
 
-				point3d_t operator()(int) {
-					float u = ourRandom();
-					float v = ourRandom();
-					//printf("(%f,%f,%f)", points[j].p.x, points[j].p.y, points[j].p.z);
-					return a + v * ac + (1-v) * u * ab;
-				}
-			} gen_func(a, ab, ac);
+		BestCandidateSampler sampler;
 
-			sampler.gen_candidates(gen_func, nr_to_keep);
-			sampler.gen_samples();
+		struct PointGenFunc {
+			point3d_t a, b, c;
+			vector3d_t ab, ac;
 
-			for(BestCandidateSampler::iterator itr = sampler.begin(); itr != sampler.end(); ++itr)
+			PointGenFunc(const triangle_t *t)
+			{
+				t->getVertices(a, b, c);
+				ab = b-a, ac = c-a;
+			}
+
+			point3d_t operator()(int) {
+				float u = ourRandom();
+				float v = ourRandom();
+				//printf("(%f,%f,%f)", points[j].p.x, points[j].p.y, points[j].p.z);
+				return a + v * ac + (1-v) * u * ab;
+			}
+		} gen_func(t);
+
+		sampler.gen_candidates(gen_func, cur_nr);
+		sampler.gen_samples();
+
+		for(BestCandidateSampler::iterator itr = sampler.begin(); itr != sampler.end(); ++itr) {
 				disks.push_back(Disk((*itr), t));
 		}
 	}
