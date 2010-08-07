@@ -1089,7 +1089,7 @@ void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &in
 
 	float max_c[3], min_c[3];
 	for(int i = 0; i < 3; i++) {
-		max_c[i] = std::numeric_limits<float>::min();
+		max_c[i] = -std::numeric_limits<float>::max();
 		min_c[i] = std::numeric_limits<float>::max();
 	}
 
@@ -1101,7 +1101,7 @@ void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &in
 		}
 	}
 
-	float max_ex = std::numeric_limits<float>::min();
+	float max_ex = -std::numeric_limits<float>::max();
 	int ex = 0;
 	for(int i = 0; i < 3; i++) {
 		float exi = max_c[i] - min_c[i];
@@ -1294,19 +1294,37 @@ void photonIntegratorGPU_t::test_intersect_brute(diffRay_t &ray, std::vector<int
 
 void photonIntegratorGPU_t::test_intersect(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius)
 {
+	static int nr_leaves = 0;
+	static int nr_int_nodes = 0;
+	static int nr_inside = 0;
+	static int nr_missed = 0;
+	static int nr_invdir = 0;
+	static int nr_leaf_cull = 0;
+
+	nr_leaves = 0;
+	nr_int_nodes = 0;
+	nr_inside = 0;
+	nr_missed = 0;
+	nr_invdir = 0;
+	nr_leaf_cull = 0;
+
 	unsigned int stack = 0;
 	unsigned int mask = 1;
 	unsigned int poz = 1;
 	while(1) {
 		while(1) { // going down
 			if(poz < int_nodes.size()) { // check internal node
+				nr_int_nodes++;
+
 				PHInternalNode &n = int_nodes[poz];
 				// d(line, center) <= radius ?
 				vector3d_t pc = n.c - ray.from;				
 				float d2 = (pc ^ ray.dir).lengthSqr();
 				float r2 = n.r * n.r;
-				if(d2 > r2)
+				if(d2 > r2) {
+					nr_missed++;
 					break;
+				}
 
 				// is p inside sphere ?
 				if(pc.lengthSqr() > r2) {
@@ -1315,16 +1333,23 @@ void photonIntegratorGPU_t::test_intersect(diffRay_t &ray, std::vector<int> &can
 					// if p outside sphere and the line intersects the sphere
 					// then c must lie roughly in the ray's direction
 					float pcr = pc * ray.dir;
-					if(pcr <= 0)
+					if(pcr <= 0) {
+						nr_invdir++;
 						break;
+					}
 					// exists t >= pcr >= 0 => found
-				}
+				} else
+					nr_inside++;
 				
 			} else { // check leaf
+				nr_leaves++;
+
 				PHLeaf &l = leaves[poz - int_nodes.size()];
 				float nr = l.n * ray.dir;
-				if(nr >= 0)
+				if(nr >= 0) {
+					nr_leaf_cull++;
 					break;
+				}
 
 				vector3d_t pm = l.c - ray.from;
 				float t = l.n * pm / nr;
@@ -1521,7 +1546,7 @@ void photonIntegratorGPU_t::upload_hierarchy()
 			__global PHLeaf *leaves,
 			int nr_int_nodes,
 			__global PHRay *rays,
-			int nr_rays,
+			int nr_rays
 		){
 
 		}
