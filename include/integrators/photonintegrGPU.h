@@ -89,7 +89,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		};
 
 		void build_disk_hierarchy(PHierarchy &ph, std::vector<const triangle_t *> &prims, int node_poz, DiskVectorType &v, int s, int e);
-		void generate_points(DiskVectorType &disks, std::vector<const triangle_t *> &prims, std::vector<PHTriangle> &tris, scene_t *scene, float r);
+		void generate_points(DiskVectorType &disks, std::vector<const triangle_t *> &prims, PHierarchy &ph, scene_t *scene);
 
 		bool renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID);
 
