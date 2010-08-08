@@ -1771,10 +1771,15 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 	checkErr(err || !d_leaves, "failed to create leaf buffer");
 	queue->writeBuffer(d_leaves, 0, d_leaves_size, &ph.leaves[0], &err);
 
+	int d_tris_size = ph.tris.size() * sizeof(PHTriangle);
+	CLBuffer *d_tris = context->createBuffer(CL_MEM_READ_WRITE, d_tris_size, NULL, &err);
+	checkErr(err || !d_tris, "failed to create leaf buffer");
+	queue->writeBuffer(d_tris, 0, d_tris_size, &ph.leaves[0], &err);
+
 	char * kernel_src = CL_SRC(
 		typedef struct
 		{
-			float c[3];	// disk center
+			float m[3];	// disk center
 			float n[3];	// disk normal
 			int tri_idx; // index of the triangle the disk belongs to
 		} PHLeaf;
@@ -1813,18 +1818,156 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			ret[0] = total;
 		}
 
+		void sub(float a[3], float b[3], float c[3]) {	// c = a - b
+			c[0] = a[0]-b[0];
+			c[1] = a[1]-b[1];
+			c[2] = a[2]-b[2];
+		}
+
+		void add(float a[3], float b[3], float c[3]) {	// c = a + b
+			c[0] = a[0]+b[0];
+			c[1] = a[1]+b[1];
+			c[2] = a[2]+b[2];
+		}
+
+		void cross(float a[3], float b[3], float c[3]) { // c = a ^ b
+			c[0] = a[1]*b[2]-a[2]*b[1];
+			c[1] = a[2]*b[0]-a[0]*b[2];
+			c[2] = a[0]*b[1]-a[1]*b[0];
+		}
+
+		void mul(float a[3], float t, float b[3]) {	// b = t * a
+			b[0] = t * a[0];
+			b[1] = t * a[1];
+			b[2] = t * a[2];
+		}
+
+		float dot(float a[3], float b[3]) {	// ret = a * b
+			return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+		}
+
+		float normSqr(float a[3]) {	// ret = |a|^2
+			return a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
+		}
+\n
 		__kernel void intersect_rays(
 			__global PHInternalNode *int_nodes, 
-			__global PHLeaf *leaves,
 			int nr_int_nodes,
+			__global PHLeaf *leaves,
+			int leaf_radius,
+			__global PHTriangle *tris,
 			__global PHRay *rays,
-			int nr_rays
+			int nr_rays,
+			__global int *inter_tris
 		){
+			PHRay ray = rays[get_global_id(0)];
+			float t_cand = FLT_MAX;
+			int cand;
 
+			unsigned int stack = 0;
+			unsigned int mask = 1;
+			unsigned int poz = 1;
+			while(1) {
+				while(1) { // going down
+					if(poz < nr_int_nodes) { // check internal node
+						PHInternalNode n = int_nodes[poz];
+						// d(line, center) <= radius ?
+						float pc[3];
+						sub(n.c, ray.p, pc);
+						float pcxr[3];
+						cross(pc, ray.r, pcxr);
+						float d2 = normSqr(pcxr);
+						float r2 = n.r * n.r;
+						if(d2 > r2) {
+							break;
+						}
+
+						// is p inside sphere ?
+						if(normSqr(pc) > r2) {
+							// exists q on line such that q in sphere
+							// is q in ray's direction ?
+							// if p outside sphere and the line intersects the sphere
+							// then c must lie roughly in the ray's direction
+							float pcr = dot(pc, ray.r);
+							if(pcr <= 0) {
+								break;
+							}
+							// exists t >= pcr >= 0 => found
+						}
+
+					} else { // check leaf
+						PHLeaf l = leaves[poz - nr_int_nodes];
+						float nr = dot(l.n, ray.r);
+						if(nr >= 0) {
+							break;
+						}
+
+						float pm[3];
+						sub(l.m, ray.p, pm);
+						float t = dot(l.n, pm) / nr;
+						float rt[3];
+						mul(ray.r, t, rt);
+						float q[3];
+						add(ray.p, rt, q);
+						float mq[3];
+						sub(q, l.m, mq);
+						float d2 = normSqr(mq);
+						float r2 = leaf_radius * leaf_radius;
+						if(d2 < r2) {
+							PHTriangle tri = tris[l.tri_idx];
+							float edge1[3], edge2[3], tvec[3], pvec[3], qvec[3];
+							float det, inv_det, u, v;
+							sub(tri.b, tri.a, edge1);
+							sub(tri.c, tri.a, edge2);
+							cross(ray.r, edge2, pvec);
+							det = dot(edge1, pvec);
+							//if (/*(det>-0.000001) && (det<0.000001))
+							if (det == 0.0)
+								break;
+							inv_det = 1.0 / det;
+							sub(ray.p, tri.a, tvec);
+							u = dot(tvec,pvec) * inv_det;
+							if (u < 0.0 || u > 1.0)
+								break;
+							cross(tvec,edge1,qvec);
+							v = dot(ray.r,qvec) * inv_det;
+							if ((v<0.0) || ((u+v)>1.0) )
+								break;
+							t = dot(edge2,qvec) * inv_det;
+							if(t < t_cand) {
+								t_cand = t;
+								cand = poz - nr_int_nodes;
+							}
+						}
+						break;
+					}
+
+					stack |= mask;
+					mask <<= 1;
+					poz *= 2;
+				}
+
+				while(1) // going up
+				{
+					mask >>= 1;
+					if(!mask)
+						return;
+					if(stack & mask) {
+						// traverse sibling
+						stack &= ~mask;
+						mask <<= 1;
+						poz++;
+						break;
+					}
+					poz /= 2;
+				}
+			}
+
+			inter_tris[get_global_id(0)] = cand;
 		}
 	);
 
-	CLProgram *program = buildCLProgram(kernel_src, context, device);
+	program = buildCLProgram(kernel_src, context, device);
 	checkErr(err || !program, "failed to build program");
 
 	{

@@ -135,6 +135,8 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		CLDevice device;
 		CLContext *context;
 		CLCommandQueue *queue;
+
+		CLProgram *program;
 };
 
 __END_YAFRAY
