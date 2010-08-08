@@ -49,8 +49,12 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 			point3d_t c;	// bounding sphere center
 			float r;		// bounding sphere radius
 			PHInternalNode() {}
-			PHInternalNode(const point3d_t &c, float r) 
-				: c(c), r(r) {}
+			/*PHInternalNode(const point3d_t &c, float r) 
+				: c(c), r(r) {}*/
+			int coord;
+			float M;
+			PHInternalNode(const point3d_t &c, float r, int coord, float M) 
+				: c(c), r(r), coord(coord), M(M) {}
 		};
 
 		struct Disk
@@ -77,8 +81,9 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		CLDevice getOpenCLDevice();
 		CLPlatform getOpenCLPlatform();
 
-		void test_intersect(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius);
+		void test_intersect_sh(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius);
 		void test_intersect_brute(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius);
+		void test_intersect_kd(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius, float t_comp);
 		void upload_hierarchy();
 		
 		background_t *background;

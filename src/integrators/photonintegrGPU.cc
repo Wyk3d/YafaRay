@@ -342,7 +342,7 @@ bool photonIntegratorGPU_t::preprocess()
 	leaf_tris.resize(nr_leaves);
 	build_disk_hierarchy(int_nodes, leaves, leaf_tris, 1, disks, 0, (int)disks.size(), leaf_radius);
 
-	upload_hierarchy();
+	//upload_hierarchy();
 
 	Y_INFO << integratorName << ": Building diffuse photon map..." << yendl;
 	
@@ -1081,7 +1081,8 @@ void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &in
 				leaf_tris[leaf_poz] = v[s].t;
 				return;
 			} else {
-				int_nodes[node_poz] = PHInternalNode(v[s].c, leaf_radius);
+				assert(false);
+				//int_nodes[node_poz] = PHInternalNode(v[s].c, leaf_radius);
 				node_poz *= 2;
 			}
 		}
@@ -1168,7 +1169,9 @@ void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &in
 	PHInternalNode &n =  int_nodes[node_poz];
 	n.r = (c21m+r1+r2)/2;
 	assert(n.r > 0);
-	n.c = c1 + c21 *( (n.r-r1)/c21m ); 
+	n.c = c1 + c21 *( (n.r-r1)/c21m );
+	n.coord = ex;
+	n.M = v[m].c[ex];
 }
 
 void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, scene_t *scene, float r) {
@@ -1292,7 +1295,7 @@ void photonIntegratorGPU_t::test_intersect_brute(diffRay_t &ray, std::vector<int
 	}
 }
 
-void photonIntegratorGPU_t::test_intersect(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius)
+void photonIntegratorGPU_t::test_intersect_sh(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius)
 {
 	static int nr_leaves = 0;
 	static int nr_int_nodes = 0;
@@ -1384,6 +1387,220 @@ void photonIntegratorGPU_t::test_intersect(diffRay_t &ray, std::vector<int> &can
 	}
 }
 
+void photonIntegratorGPU_t::test_intersect_kd(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius, float t_comp)
+{
+	static int nr_leaves = 0;
+	static int nr_int_nodes = 0;
+	static int nr_leaf_cull = 0;
+	static int nr_inside = 0;
+	static int nr_missed = 0;
+	static int nr_invdir = 0;
+
+	nr_leaves = 0;
+	nr_int_nodes = 0;
+	nr_leaf_cull = 0;
+	nr_inside = 0;
+	nr_missed = 0;
+	nr_invdir = 0;
+
+	unsigned int stack = 0;
+	unsigned char depth = 0;
+	unsigned int poz = 1;
+	float tmax = std::numeric_limits<float>::max();
+	float tmin = -std::numeric_limits<float>::max();
+	bool found = false;
+	bool do_report = false;
+
+	float t_cand = std::numeric_limits<float>::max();
+
+#define REPORT { if(do_report) if(poz < int_nodes.size()) printf("int %d %f %f\n", poz, tmin, tmax); \
+		else printf("leaf %d %f %f", poz-int_nodes.size(), tmin, tmax); }
+
+#define GO_LEFT  { \
+	poz *= 2; \
+	depth++; \
+	REPORT \
+	continue; }
+#define GO_RIGHT { \
+	poz = poz * 2 + 1; \
+	depth++; \
+	REPORT \
+	continue; }
+
+	REPORT
+	while(1) {
+		while(1) // going down
+		{
+			if(poz < int_nodes.size()) { // check internal node
+				nr_int_nodes++;
+
+				PHInternalNode &n = int_nodes[poz];
+
+				// d(line, center) <= radius ?
+				vector3d_t pc = n.c - ray.from;				
+				float d2 = (pc ^ ray.dir).lengthSqr();
+				float r2 = n.r * n.r;
+				if(d2 > r2) {
+					nr_missed++;
+					break;
+				}
+
+				float P = ray.from[n.coord];
+				float M = n.M;
+				float R = ray.dir[n.coord];
+				
+				if(P < M) {
+					if(R <= 0)			//  <-P   M
+						GO_LEFT
+					float t = (M-P)/R;	//    P-> M
+					if(t >= tmax)
+						GO_LEFT
+					/*if(t <= tmin)
+						GO_RIGHT*/
+					stack |= (1<<depth);
+					tmax = t;
+					GO_LEFT
+					/* tmax' = tmax
+					 if(!found) {
+						tmin' = t;
+						GO_RIGHT
+					}
+					*/
+				} else {
+					if(R >= 0)			//	      M   P->
+						GO_RIGHT
+					float t = (P-M)/-R; //		  M <-P
+					if(t >= tmax)
+						GO_RIGHT
+					/*if(t <= tmin)
+						GO_LEFT*/
+					stack |= (1<<depth);
+					tmax = t;
+					if(tmax < t_comp) {
+						//Y_ERROR << "tmax < t_comp" << yendl;
+					}
+					GO_RIGHT
+					/*
+					tmax' = tmax
+					if(!found) {
+						tmin' = t
+						GO_LEFT
+					}
+					*/
+				}
+			} else { // check leaf
+				nr_leaves++;
+
+				PHLeaf &l = leaves[poz - int_nodes.size()];
+				float nr = l.n * ray.dir;
+				if(nr >= 0) {
+					nr_leaf_cull++;
+					break;
+				}
+
+				vector3d_t pm = l.c - ray.from;
+				float t = l.n * pm / nr;
+				point3d_t q = ray.from + ray.dir * t;
+
+				float d2 = (q - l.c).lengthSqr();
+				float r2 = leaf_radius * leaf_radius;
+				if(d2 < r2) {
+					point3d_t a,b,c;
+					const triangle_t * tri = leaf_tris[poz-int_nodes.size()];
+					tri->getVertices(a,b,c);
+					vector3d_t edge1, edge2, tvec, pvec, qvec;
+					PFLOAT det, inv_det, u, v;
+					edge1 = b - a;
+					edge2 = c - a;
+					pvec = ray.dir ^ edge2;
+					det = edge1 * pvec;
+					if (/*(det>-0.000001) && (det<0.000001)*/ det == 0.0)
+						break;
+					inv_det = 1.0 / det;
+					tvec = ray.from - a;
+					u = (tvec*pvec) * inv_det;
+					if (u < 0.0 || u > 1.0)
+						break;
+					qvec = tvec^edge1;
+					v = (ray.dir*qvec) * inv_det;
+					if ((v<0.0) || ((u+v)>1.0) )
+						break;
+					t = edge2 * qvec * inv_det;
+					if(t < t_cand) {
+						t_cand = t;
+						candidates.clear();
+						candidates.push_back(poz - int_nodes.size());
+					}
+				}
+				break;
+			}
+		}
+
+		while(1) // going up
+		{
+			if(depth == 0)
+				return;
+			depth--;
+			
+			int mask = (1<<depth);
+			if(stack & mask) {
+				
+				stack &= ~mask;	
+				
+				int p = poz / 2;
+				// move tmin forward
+				PHInternalNode &n = int_nodes[p];
+				float P = ray.from[n.coord];
+				float M = n.M;
+				float R = ray.dir[n.coord];
+				float t = (M-P)/R;
+				if(t < tmin) {
+					static bool r = false;
+					if(r) Y_ERROR << "t < tmin" << yendl;
+				}
+				tmin = t;
+				if(tmin > t_comp) {
+					static bool r = false;
+					if(r) Y_ERROR << "tmin > t_comp" << yendl;
+				}
+
+				// revert tmax
+				// when was the last time tmax was set ?
+				while(1)
+				{
+					mask >>= 1;
+					p /= 2;
+					if(!mask) {
+						tmax = std::numeric_limits<float>::max();
+						break;
+					} else if(stack & mask) {
+						PHInternalNode &n = int_nodes[p];
+						float P = ray.from[n.coord];
+						float M = n.M;
+						float R = ray.dir[n.coord];
+						float t = (M-P)/R;
+						if(t < tmax) {
+							static bool r = false;
+							if(r) Y_ERROR << "t < tmax" << yendl;
+						}
+						tmax = t;
+						break;
+					}
+				}
+				
+				// traverse sibling
+				depth++;
+				poz += -(poz % 2) * 2 + 1;
+				REPORT
+				break;
+			}
+			
+			poz /= 2;
+			REPORT
+		}
+	}
+}
+
 bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID)
 {
 	class RayStorer : public tiledIntegrator_t::PrimaryRayGenerator {
@@ -1412,77 +1629,83 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 
 	{
 		for(std::vector<diffRay_t>::iterator itr = c_rays.begin(); itr != c_rays.end(); ++itr) {
-			diffRay_t &ray = (*itr);
-			surfacePoint_t pt;
-			bool found = scene->intersect(ray, pt);
+			while(1)
+			{
+				diffRay_t ray = (*itr);
+				surfacePoint_t pt;
+				bool found = scene->intersect(ray, pt);
+				float t = (pt.P.x - ray.from.x) / ray.dir.x;
 
-			std::vector<int> candidates;
-			test_intersect(ray, candidates, leaf_radius);
+				std::vector<int> candidates;
+				test_intersect_kd(ray, candidates, leaf_radius, t);
 
-			if(!found) {
-				if(!candidates.empty()) {
-					Y_ERROR << "found candidates even if there shouldn't be an intersection\n";
-					continue;
-				}
-			} else {
-				if(candidates.empty()) {
-					Y_ERROR << "found no candiates although there should be intersections\n";
-					continue;
-				}
-			}
-
-			float tmin = std::numeric_limits<float>::max();
-			int idx_min = 0;
-			for(int i = 0; i < candidates.size(); ++i) {
-				int idx = candidates[i];
-				PHLeaf &l = leaves[idx];
-				const triangle_t *tri = leaf_tris[idx];
-
-				PFLOAT t;
-				unsigned char udat2[PRIM_DAT_SIZE];
-				bool good = tri->intersect(ray, &t, udat2);
-				if(good) {
-					if(t < tmin) {
-						tmin = t;
-						idx_min = idx;
-					}
-				}
-			}
-
-			point3d_t q = ray.from + tmin * ray.dir;
-			float d = (q-pt.P).length();
-			
-			const triangle_t *tri_min = leaf_tris[idx_min];
-			if(tri_min != pt.origin || d > 1e-5) { 
-				if(tri_min != pt.origin) Y_ERROR << "wrong triangle intersected\n";
-				if(d > 1e-5) Y_ERROR << "distance too big: " << d << yendl;
-
-				bool found = true;
-				for(int i = 0; i < leaves.size(); ++i) {
-					PHLeaf &l = leaves[i];
-					const triangle_t *tri = leaf_tris[i];
-					if(tri == pt.origin) {
-						float nr = l.n * ray.dir;
-						if(nr >= 0) {
-							Y_ERROR << "disk on hit triangle not facing ray";
-							continue;
-						}
-
-						vector3d_t pm = l.c - ray.from;
-						float t = l.n * pm / nr;
-						point3d_t q = ray.from + ray.dir * t;
-
-						float d2 = (q - l.c).lengthSqr();
-						float r2 = leaf_radius * leaf_radius;
-						if(d2 < r2) {
-							Y_ERROR << "ray should have hit disk " << i << yendl;
-							found = true;
-						}
-					}
-				}
 				if(!found) {
-					Y_ERROR << "no candidate disks for the ray" << yendl;
+					if(!candidates.empty()) {
+						Y_ERROR << "found candidates even if there shouldn't be an intersection\n";
+						continue;
+					}
+				} else {
+					if(candidates.empty()) {
+						Y_ERROR << "found no candiates although there should be intersections\n";
+						continue;
+					}
 				}
+
+				float tmin = std::numeric_limits<float>::max();
+				int idx_min = 0;
+				for(int i = 0; i < candidates.size(); ++i) {
+					int idx = candidates[i];
+					PHLeaf &l = leaves[idx];
+					const triangle_t *tri = leaf_tris[idx];
+
+					PFLOAT t;
+					unsigned char udat2[PRIM_DAT_SIZE];
+					bool good = tri->intersect(ray, &t, udat2);
+					if(good) {
+						if(t < tmin) {
+							tmin = t;
+							idx_min = idx;
+						}
+					}
+				}
+
+				point3d_t q = ray.from + tmin * ray.dir;
+				float d = (q-pt.P).length();
+				
+				const triangle_t *tri_min = leaf_tris[idx_min];
+				if(tri_min != pt.origin || d > 1e-5) { 
+					if(tri_min != pt.origin) Y_ERROR << "wrong triangle intersected\n";
+					if(d > 1e-5) Y_ERROR << "distance too big: " << d << yendl;
+
+					bool found = false;
+					for(int i = 0; i < leaves.size(); ++i) {
+						PHLeaf &l = leaves[i];
+						const triangle_t *tri = leaf_tris[i];
+						if(tri == pt.origin) {
+							float nr = l.n * ray.dir;
+							if(nr >= 0) {
+								Y_ERROR << "disk on hit triangle not facing ray";
+								continue;
+							}
+
+							vector3d_t pm = l.c - ray.from;
+							float t = l.n * pm / nr;
+							point3d_t q = ray.from + ray.dir * t;
+
+							float d2 = (q - l.c).lengthSqr();
+							float r2 = leaf_radius * leaf_radius;
+							if(d2 < r2) {
+								Y_ERROR << "ray should have hit disk " << i << yendl;
+								found = true;
+							}
+						}
+					}
+					if(!found) {
+						Y_ERROR << "no candidate disks for the ray" << yendl;
+					}
+					continue;
+				}
+				break;
 			}
 		}
 	}
