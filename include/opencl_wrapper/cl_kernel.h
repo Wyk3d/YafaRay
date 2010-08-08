@@ -90,6 +90,37 @@ class CLKernel :
 			return true;
 		}
 
+		template<typename A0, typename A1, typename A2, typename A3, typename A4, typename A5, typename A6, typename A7, typename A8>
+		bool setArgs(const A0& a0, const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6, const A7& a7, const A8& a8, CLError *error = NULL) {
+			CLErrGuard err(error);
+			if(getNumArgs(&err) != 9) return false;
+			if(setArg(0, a0, &err)) return false;
+			if(setArg(1, a1, &err)) return false;
+			if(setArg(2, a2, &err)) return false;
+			if(setArg(3, a3, &err)) return false;
+			if(setArg(4, a4, &err)) return false;
+			if(setArg(5, a5, &err)) return false;
+			if(setArg(6, a6, &err)) return false;
+			if(setArg(7, a7, &err)) return false;
+			if(setArg(8, a8, &err)) return false;
+			return true;
+		}
+
+		template<typename A0, typename A1, typename A2, typename A3, typename A4, typename A5, typename A6, typename A7>
+		bool setArgs(const A0& a0, const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6, const A7& a7, CLError *error = NULL) {
+			CLErrGuard err(error);
+			if(getNumArgs(&err) != 8) return false;
+			if(setArg(0, a0, &err)) return false;
+			if(setArg(1, a1, &err)) return false;
+			if(setArg(2, a2, &err)) return false;
+			if(setArg(3, a3, &err)) return false;
+			if(setArg(4, a4, &err)) return false;
+			if(setArg(5, a5, &err)) return false;
+			if(setArg(6, a6, &err)) return false;
+			if(setArg(7, a7, &err)) return false;
+			return true;
+		}
+
 		template<typename A0, typename A1, typename A2, typename A3, typename A4>
 		bool setArgs(const A0& a0, const A1& a1, const A2& a2, const A3& a3, const A4& a4, CLError *error = NULL) {
 			CLErrGuard err(error);

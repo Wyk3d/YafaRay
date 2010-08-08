@@ -68,6 +68,15 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 			PHTriangle() {}
 		};
 
+		struct PHRay
+		{
+			point3d_t p;
+			vector3d_t r;
+			PHRay(const point3d_t &p, const vector3d_t &r)
+				: p(p), r(r) {}
+			PHRay() {}
+		};
+
 		struct Disk
 		{
 			point3d_t c;
@@ -136,6 +145,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		CLContext *context;
 		CLCommandQueue *queue;
 
+		CLBuffer *d_int_nodes, *d_leaves, *d_tris;
 		CLProgram *program;
 };
 
