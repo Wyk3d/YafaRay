@@ -35,12 +35,15 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		{
 			point3d_t c;	// disk center
 			vector3d_t n;	// disk normal
-			int mat_type;	// disk material type
+			/*int mat_type;	// disk material type
 			PHLeaf(const point3d_t &c, const vector3d_t &n, int mat_type)
-				: c(c), n(n), mat_type(mat_type) {}
+				: c(c), n(n), mat_type(mat_type) {}*/
 			/*const triangle_t *t;
 			PHLeaf(const point3d_t &c, const vector3d_t &n, const triangle_t *t)
 				: c(c), n(n), t(t) {}*/
+			int tri_idx;
+			PHLeaf(const point3d_t &c, const vector3d_t &n, int tri_idx)
+				: c(c), n(n), tri_idx(tri_idx) {}
 			PHLeaf() {}
 		};
 
@@ -57,20 +60,36 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 				: c(c), r(r), coord(coord), M(M) {}
 		};
 
+		struct PHTriangle
+		{
+			point3d_t a, b, c;
+			PHTriangle(const point3d_t &a, const point3d_t &b, const point3d_t &c)
+				: a(a), b(b), c(c) {}
+			PHTriangle() {}
+		};
+
 		struct Disk
 		{
 			point3d_t c;
-			const triangle_t *t;
+			int tri_idx;
 			Disk() {}
-			Disk(point3d_t c, const triangle_t *t)
-				: c(c), t(t) {}
+			Disk(point3d_t c, int tri_idx)
+				: c(c), tri_idx(tri_idx) {}
 		};
 
 		typedef std::vector<Disk> DiskVectorType;
 		typedef std::vector<vector3d_t> NormalVectorType;
 
-		void build_disk_hierarchy(std::vector<PHInternalNode> &int_nodes, std::vector<PHLeaf> &leaves, std::vector<const triangle_t *> &leaf_tris, int node_poz, DiskVectorType &v, int s, int e, float leaf_radius);
-		void generate_points(DiskVectorType &disks, scene_t *scene, float r);
+		struct PHierarchy
+		{
+			std::vector<PHInternalNode> int_nodes;
+			std::vector<PHLeaf> leaves;
+			std::vector<PHTriangle> tris;
+			float leaf_radius;
+		};
+
+		void build_disk_hierarchy(PHierarchy &ph, std::vector<const triangle_t *> &prims, int node_poz, DiskVectorType &v, int s, int e);
+		void generate_points(DiskVectorType &disks, std::vector<const triangle_t *> &prims, std::vector<PHTriangle> &tris, scene_t *scene, float r);
 
 		bool renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID);
 
@@ -84,7 +103,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		void test_intersect_sh(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius);
 		void test_intersect_brute(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius);
 		void test_intersect_kd(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius, float t_comp);
-		void upload_hierarchy();
+		void upload_hierarchy(PHierarchy &ph);
 		
 		background_t *background;
 		bool trShad;
@@ -109,10 +128,8 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		friend class RayStorer;
 		std::vector<diffRay_t> c_rays;
 		DiskVectorType disks;
-		std::vector<PHInternalNode> int_nodes;
-		std::vector<PHLeaf> leaves;
-		std::vector<const triangle_t *> leaf_tris;
-		float leaf_radius;
+		PHierarchy pHierarchy;
+		std::vector<const triangle_t*> prims;
 
 		CLPlatform platform;
 		CLDevice device;

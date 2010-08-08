@@ -328,21 +328,20 @@ bool photonIntegratorGPU_t::preprocess()
 	if(intpb) pb = intpb;
 	else pb = new ConsoleProgressBar_t(80);
 
-	leaf_radius = 0.5;
+	pHierarchy.leaf_radius = 0.5;
 	disks.clear();
-	generate_points(disks, scene, 0.1);
+	generate_points(disks, prims, pHierarchy.tris, scene, 0.1);
 	int node_size = std::max(sizeof(PHInternalNode), sizeof(PHLeaf));
 	// should be max leaves = 2^h > nr disks ..
 	int h = (int)(ceil(log((double)disks.size()) / log(2.0)));
 	int nr_leaves = (1<<h);
 	int nr_internal_nodes = nr_leaves; // -1 (from the formula) +1 from position 0 not used
 	
-	int_nodes.resize(nr_internal_nodes);
-	leaves.resize(nr_leaves);
-	leaf_tris.resize(nr_leaves);
-	build_disk_hierarchy(int_nodes, leaves, leaf_tris, 1, disks, 0, (int)disks.size(), leaf_radius);
+	pHierarchy.int_nodes.resize(nr_internal_nodes);
+	pHierarchy.leaves.resize(nr_leaves);
+	build_disk_hierarchy(pHierarchy, prims, 1, disks, 0, (int)disks.size());
 
-	//upload_hierarchy();
+	upload_hierarchy(pHierarchy);
 
 	Y_INFO << integratorName << ": Building diffuse photon map..." << yendl;
 	
@@ -1068,17 +1067,17 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	return ite;
 }
 
-void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &int_nodes, std::vector<PHLeaf> &leaves, std::vector<const triangle_t *> &leaf_tris, int node_poz, DiskVectorType &v, int s, int e, float leaf_radius) {
+void photonIntegratorGPU_t::build_disk_hierarchy(PHierarchy &ph, std::vector<const triangle_t *> &prims, int node_poz, DiskVectorType &v, int s, int e) {
 	if(s >= e - 1) {
 		assert(s == e-1);
 		
 		while(1) {
-			int leaf_poz = node_poz - int_nodes.size();
+			int leaf_poz = node_poz - ph.int_nodes.size();
 			if(leaf_poz >= 0) {
-				assert(leaf_poz < leaves.size());
-				leaves[leaf_poz] = PHLeaf(v[s].c, v[s].t->getNormal(), 1);
+				assert(leaf_poz < ph.leaves.size());
+				ph.leaves[leaf_poz] = PHLeaf(v[s].c, prims[v[s].tri_idx]->getNormal(), 1);
 				//leaves[leaf_poz] = PHLeaf(v[s].c, v[s].t->getNormal(), v[s].t);
-				leaf_tris[leaf_poz] = v[s].t;
+				//leaf_tris[leaf_poz] = v[s].t;
 				return;
 			} else {
 				assert(false);
@@ -1135,30 +1134,30 @@ void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &in
 	int left_poz = 2*node_poz;
 	int right_poz = 2*node_poz+1;
 
-	build_disk_hierarchy(int_nodes, leaves, leaf_tris, left_poz, v, s, m, leaf_radius);
-	build_disk_hierarchy(int_nodes, leaves, leaf_tris, right_poz, v, m, e, leaf_radius);
+	build_disk_hierarchy(ph, prims, left_poz, v, s, m);
+	build_disk_hierarchy(ph, prims, right_poz, v, m, e);
 
 	float r1, r2;
 	point3d_t c1, c2;
 
-	int left_leaf_poz = left_poz - int_nodes.size();
+	int left_leaf_poz = left_poz - ph.int_nodes.size();
 	if(left_leaf_poz >= 0) {	// right child is a leaf
-		PHLeaf &l = leaves[left_leaf_poz];
+		PHLeaf &l = ph.leaves[left_leaf_poz];
 		c1 = l.c;
-		r1 = leaf_radius;
+		r1 = ph.leaf_radius;
 	} else {			// right child is an internal node
-		PHInternalNode &n = int_nodes[left_poz];
+		PHInternalNode &n = ph.int_nodes[left_poz];
 		c1 = n.c;
 		r1 = n.r;
 	}
 
-	int right_leaf_poz = right_poz - int_nodes.size();
+	int right_leaf_poz = right_poz - ph.int_nodes.size();
 	if(right_leaf_poz >= 0) {		// left child is a leaf
-		PHLeaf &l = leaves[right_leaf_poz];
+		PHLeaf &l = ph.leaves[right_leaf_poz];
 		c2 = l.c;
-		r2 = leaf_radius;
+		r2 = ph.leaf_radius;
 	} else {			// left child is an internal node
-		PHInternalNode &n = int_nodes[right_poz];
+		PHInternalNode &n = ph.int_nodes[right_poz];
 		c2 = n.c;
 		r2 = n.r;
 	}
@@ -1166,7 +1165,7 @@ void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &in
 	vector3d_t c21 = c2-c1;
 	float c21m = c21.length();
 
-	PHInternalNode &n =  int_nodes[node_poz];
+	PHInternalNode &n =  ph.int_nodes[node_poz];
 	n.r = (c21m+r1+r2)/2;
 	assert(n.r > 0);
 	n.c = c1 + c21 *( (n.r-r1)/c21m );
@@ -1174,7 +1173,8 @@ void photonIntegratorGPU_t::build_disk_hierarchy(std::vector<PHInternalNode> &in
 	n.M = v[m].c[ex];
 }
 
-void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, scene_t *scene, float r) {
+void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<const triangle_t*> &prims, std::vector<PHTriangle> &tris, scene_t *scene, float r)
+{
 	scene_t::objDataArray_t &meshes = scene->getMeshes();
 	
 	int total_prims = 0;
@@ -1182,7 +1182,7 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, scene_t *scen
 		total_prims += itr->second.obj->numPrimitives();
 	}
 
-	std::vector<const triangle_t*> tris;
+	prims.resize(total_prims);
 	tris.resize(total_prims);
 
 	std::vector<int> nr_to_keep;
@@ -1193,16 +1193,16 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, scene_t *scen
 	//float area_multiplier = 1;
 
 	int total_nr_tmp = 0;
-	int tris_remaining = total_prims;
+	int prims_remaining = total_prims;
 
 	for(scene_t::objDataArray_t::iterator itr = meshes.begin(); itr != meshes.end(); ++itr)
 	{
 		triangleObject_t *obj = itr->second.obj;
 		int nr_mesh_primitives = obj->numPrimitives();
-		itr->second.obj->getPrimitives(&tris[tri_idx]);
+		itr->second.obj->getPrimitives(&prims[tri_idx]);
 
 		for(int i = 0; i < nr_mesh_primitives; ++i) {
-			const triangle_t *t = tris[tri_idx];
+			const triangle_t *t = prims[tri_idx];
 
 			vector3d_t n = t->getNormal();
 			if(n.lengthSqr() < 1.0 - 1e-5) {
@@ -1216,7 +1216,7 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, scene_t *scen
 					<< "(" << n.x << "," << n.y << "," << n.z << ")" << yendl;
 				nr_to_keep[tri_idx] = 0;
 				++tri_idx;
-				--tris_remaining;
+				--prims_remaining;
 				continue;
 			}
 
@@ -1232,31 +1232,32 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, scene_t *scen
 	while(total_nr < total_nr_tmp) total_nr *= 2;
 
 	int diff = (total_nr - total_nr_tmp);
-	int diff_per_tri = diff / tris_remaining;
-	int diff_mod = diff % tris_remaining;
+	int diff_per_tri = diff / prims_remaining;
+	int diff_mod = diff % prims_remaining;
 		
 	for(int i = 0; i < total_prims; ++i)
 	{
 		if(nr_to_keep[i] == 0)
 			continue;
 
-		const triangle_t *t = tris[i];
+		const triangle_t *t = prims[i];
 		int cur_nr = nr_to_keep[i] + diff_per_tri;
 		if(diff_mod > 0) {
 			diff_mod --;
 			cur_nr ++;
 		}
 
-		BestCandidateSampler sampler;
+		PHTriangle &pht = tris[i];
+		t->getVertices(pht.a, pht.b, pht.c);
 
+		BestCandidateSampler sampler;
 		struct PointGenFunc {
-			point3d_t a, b, c;
+			point3d_t &a;
 			vector3d_t ab, ac;
 
-			PointGenFunc(const triangle_t *t)
+			PointGenFunc(PHTriangle &t) : a(t.a)
 			{
-				t->getVertices(a, b, c);
-				ab = b-a, ac = c-a;
+				ab = t.b-t.a, ac = t.c-t.a;
 			}
 
 			point3d_t operator()(int) {
@@ -1265,21 +1266,21 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, scene_t *scen
 				//printf("(%f,%f,%f)", points[j].p.x, points[j].p.y, points[j].p.z);
 				return a + v * ac + (1-v) * u * ab;
 			}
-		} gen_func(t);
+		} gen_func(pht);
 
 		sampler.gen_candidates(gen_func, cur_nr);
 		sampler.gen_samples();
 
 		for(BestCandidateSampler::iterator itr = sampler.begin(); itr != sampler.end(); ++itr) {
-				disks.push_back(Disk((*itr), t));
+				disks.push_back(Disk((*itr), i));
 		}
 	}
 }
 
 void photonIntegratorGPU_t::test_intersect_brute(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius)
 {
-	for(int i = 0; i < leaves.size(); ++i) {
-		PHLeaf &l = leaves[i];
+	for(int i = 0; i < pHierarchy.leaves.size(); ++i) {
+		PHLeaf &l = pHierarchy.leaves[i];
 		float nr = l.n * ray.dir;
 		if(nr >= 0)
 			continue;
@@ -1310,6 +1311,10 @@ void photonIntegratorGPU_t::test_intersect_sh(diffRay_t &ray, std::vector<int> &
 	nr_missed = 0;
 	nr_invdir = 0;
 	nr_leaf_cull = 0;
+
+	std::vector<PHInternalNode> &int_nodes = pHierarchy.int_nodes;
+	std::vector<PHLeaf> &leaves = pHierarchy.leaves;
+	std::vector<PHTriangle> &tris = pHierarchy.tris;
 
 	unsigned int stack = 0;
 	unsigned int mask = 1;
@@ -1402,6 +1407,10 @@ void photonIntegratorGPU_t::test_intersect_kd(diffRay_t &ray, std::vector<int> &
 	nr_inside = 0;
 	nr_missed = 0;
 	nr_invdir = 0;
+
+	std::vector<PHInternalNode> &int_nodes = pHierarchy.int_nodes;
+	std::vector<PHLeaf> &leaves = pHierarchy.leaves;
+	std::vector<PHTriangle> &tris = pHierarchy.tris;
 
 	unsigned int stack = 0;
 	unsigned char depth = 0;
@@ -1505,19 +1514,17 @@ void photonIntegratorGPU_t::test_intersect_kd(diffRay_t &ray, std::vector<int> &
 				float d2 = (q - l.c).lengthSqr();
 				float r2 = leaf_radius * leaf_radius;
 				if(d2 < r2) {
-					point3d_t a,b,c;
-					const triangle_t * tri = leaf_tris[poz-int_nodes.size()];
-					tri->getVertices(a,b,c);
+					PHTriangle &tri = tris[l.tri_idx];
 					vector3d_t edge1, edge2, tvec, pvec, qvec;
 					PFLOAT det, inv_det, u, v;
-					edge1 = b - a;
-					edge2 = c - a;
+					edge1 = tri.b - tri.a;
+					edge2 = tri.c - tri.a;
 					pvec = ray.dir ^ edge2;
 					det = edge1 * pvec;
 					if (/*(det>-0.000001) && (det<0.000001)*/ det == 0.0)
 						break;
 					inv_det = 1.0 / det;
-					tvec = ray.from - a;
+					tvec = ray.from - tri.a;
 					u = (tvec*pvec) * inv_det;
 					if (u < 0.0 || u > 1.0)
 						break;
@@ -1628,6 +1635,11 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	rs.genRays();
 
 	{
+		std::vector<PHInternalNode> &int_nodes = pHierarchy.int_nodes;
+		std::vector<PHLeaf> &leaves = pHierarchy.leaves;
+		std::vector<PHTriangle> &tris = pHierarchy.tris;
+		float leaf_radius = pHierarchy.leaf_radius;
+
 		for(std::vector<diffRay_t>::iterator itr = c_rays.begin(); itr != c_rays.end(); ++itr) {
 			while(1)
 			{
@@ -1656,7 +1668,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 				for(int i = 0; i < candidates.size(); ++i) {
 					int idx = candidates[i];
 					PHLeaf &l = leaves[idx];
-					const triangle_t *tri = leaf_tris[idx];
+					const triangle_t *tri = prims[l.tri_idx];
 
 					PFLOAT t;
 					unsigned char udat2[PRIM_DAT_SIZE];
@@ -1672,7 +1684,8 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 				point3d_t q = ray.from + tmin * ray.dir;
 				float d = (q-pt.P).length();
 				
-				const triangle_t *tri_min = leaf_tris[idx_min];
+				PHLeaf &l = leaves[idx_min];
+				const triangle_t *tri_min = prims[l.tri_idx];
 				if(tri_min != pt.origin || d > 1e-5) { 
 					if(tri_min != pt.origin) Y_ERROR << "wrong triangle intersected\n";
 					if(d > 1e-5) Y_ERROR << "distance too big: " << d << yendl;
@@ -1680,7 +1693,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 					bool found = false;
 					for(int i = 0; i < leaves.size(); ++i) {
 						PHLeaf &l = leaves[i];
-						const triangle_t *tri = leaf_tris[i];
+						const triangle_t *tri = prims[l.tri_idx];
 						if(tri == pt.origin) {
 							float nr = l.n * ray.dir;
 							if(nr >= 0) {
@@ -1717,18 +1730,18 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	return true;
 }
 
-void photonIntegratorGPU_t::upload_hierarchy()
+void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 {
 	CLError err;
-	int d_int_nodes_size = int_nodes.size() * sizeof(PHInternalNode);
+	int d_int_nodes_size = ph.int_nodes.size() * sizeof(PHInternalNode);
 	CLBuffer *d_int_nodes = context->createBuffer(CL_MEM_READ_WRITE, d_int_nodes_size, NULL, &err);
 	checkErr(err || !d_int_nodes, "failed to create internal node buffer");
-	queue->writeBuffer(d_int_nodes, 0, d_int_nodes_size, &int_nodes[0], &err);
+	queue->writeBuffer(d_int_nodes, 0, d_int_nodes_size, &ph.int_nodes[0], &err);
 
-	int d_leaves_size = leaves.size() * sizeof(PHInternalNode);
+	int d_leaves_size = ph.leaves.size() * sizeof(PHInternalNode);
 	CLBuffer *d_leaves = context->createBuffer(CL_MEM_READ_WRITE, d_leaves_size, NULL, &err);
 	checkErr(err || !d_leaves, "failed to create leaf buffer");
-	queue->writeBuffer(d_leaves, 0, d_leaves_size, &leaves[0], &err);
+	queue->writeBuffer(d_leaves, 0, d_leaves_size, &ph.leaves[0], &err);
 
 	char * kernel_src = CL_SRC(
 		typedef struct
@@ -1792,11 +1805,11 @@ void photonIntegratorGPU_t::upload_hierarchy()
 		ret = -1;
 
 		float comp = 0;
-		for(int i = 0; i < int_nodes.size(); ++i) {
-			comp += int_nodes[i].r / int_nodes.size();
+		for(int i = 0; i < ph.int_nodes.size(); ++i) {
+			comp += ph.int_nodes[i].r / ph.int_nodes.size();
 		}
 
-		kernel->setArgs(d_int_nodes, d_leaves, (int)int_nodes.size(), d_ret, &err);
+		kernel->setArgs(d_int_nodes, d_leaves, (int)ph.int_nodes.size(), d_ret, &err);
 		checkErr(err, "failed to set kernel arguments");
 
 		queue->runKernel(kernel, Range1D(1,1), &err);
@@ -1816,15 +1829,12 @@ void photonIntegratorGPU_t::upload_hierarchy()
 		}
 	}
 
-
 	program->free(&err);
 	checkErr("failed to free program");
 	d_int_nodes->free(&err);
 	checkErr(err, "failed to free d_int_nodes");
 	d_leaves->free(&err);
 	checkErr(err, "failed to free d_leaves");
-
-
 }
 
 void photonIntegratorGPU_t::onSceneUpdate() {
