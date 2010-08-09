@@ -1,6 +1,6 @@
 #include <yafray_config.h>
 
-#include "cl_util.h"
+#include <opencl_wrapper/cl_util.h>
 #include <time.h>
 #include <math.h>
 

@@ -3,7 +3,7 @@
 #include <string>
 #include <time.h>
 #include <stdio.h>
-#include "cl_util.h"
+#include <opencl_wrapper/cl_util.h>
 
 using namespace yafaray;
 
