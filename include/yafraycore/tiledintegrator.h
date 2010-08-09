@@ -48,11 +48,12 @@ class YAFRAYCORE_EXPORT tiledIntegrator_t: public surfaceIntegrator_t
 				virtual void onCameraRayMissed(int i, int j, int dx, int dy) { }
 				virtual void rays(diffRay_t &c_ray, int i, int j, int dx, int dy, float wt) = 0;
 				void genRays();
+				renderState_t &getRenderState() { return rstate; }
 		};
 
 		class YAFRAYCORE_EXPORT RenderTile_PrimaryRayGenerator : public tiledIntegrator_t::PrimaryRayGenerator
 		{
-			private:
+			protected:
 				bool adaptive, threadID;
 				bool do_depth;
 				imageFilm_t *imageFilm;

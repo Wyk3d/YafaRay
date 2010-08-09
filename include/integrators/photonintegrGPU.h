@@ -112,7 +112,11 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		void test_intersect_sh(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius);
 		void test_intersect_brute(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius);
 		void test_intersect_kd(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius, float t_comp);
+		void test_intersect_stored(diffRay_t &ray, std::vector<int> &candidates, renderState_t &t);
 		void upload_hierarchy(PHierarchy &ph);
+
+		bool getSPforRay(const diffRay_t &ray, renderState_t &rstate, surfacePoint_t &sp) const;
+		bool getSPfromHit(const diffRay_t &ray, int tri_idx, surfacePoint_t &sp) const;
 		
 		background_t *background;
 		bool trShad;

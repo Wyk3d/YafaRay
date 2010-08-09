@@ -926,6 +926,34 @@ color_t photonIntegratorGPU_t::finalGathering(renderState_t &state, const surfac
 	return pathCol / (float)nSampl;
 }
 
+bool photonIntegratorGPU_t::getSPfromHit(const diffRay_t &ray, int tri_idx, surfacePoint_t &sp) const
+{
+	if(tri_idx == 0)
+		return false;
+
+	unsigned char udat[PRIM_DAT_SIZE];
+
+	const triangle_t *hitt = prims[tri_idx];
+	
+	PFLOAT Z;
+	bool hit = hitt->intersect(ray, &Z, (void*)&udat[0]);
+	if(!hit) {
+		Y_ERROR << "hit was not computed correctly" << yendl;
+		return false;
+	}
+
+	point3d_t h=ray.from + Z*ray.dir;
+	hitt->getSurface(sp, h, (void*)&udat[0]);
+	sp.origin = (triangle_t*)hitt;
+	return true;
+}
+
+bool photonIntegratorGPU_t::getSPforRay(const diffRay_t &ray, renderState_t &rstate, surfacePoint_t &sp) const
+{
+	int tri_idx = rstate.inter_tris[ray.idx];
+	return getSPfromHit(ray, tri_idx, sp);
+}
+
 colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) const
 {
 	const diffRay_t &orig_ray = c_rays[ray.idx];
@@ -958,11 +986,13 @@ colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) 
 	++calls;
 	color_t col(0.0);
 	CFLOAT alpha=0.0;
+
 	surfacePoint_t sp;
 	
 	void *o_udat = state.userdata;
 	bool oldIncludeLights = state.includeLights;
-	if(scene->intersect(ray, sp))
+
+	if(getSPforRay(ray, state, sp))
 	{
 		unsigned char userdata[USER_DATA_SIZE+7];
 		state.userdata = (void *)( &userdata[7] - ( ((size_t)&userdata[7])&7 ) ); // pad userdata to 8 bytes
@@ -1657,6 +1687,11 @@ void photonIntegratorGPU_t::test_intersect_kd(diffRay_t &ray, std::vector<int> &
 	}
 }
 
+void photonIntegratorGPU_t::test_intersect_stored(diffRay_t &ray, std::vector<int> &candidates, renderState_t &state)
+{
+	candidates.push_back(state.inter_tris[ray.idx]);
+}
+
 bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID)
 {
 	class RayStorer : public tiledIntegrator_t::PrimaryRayGenerator {
@@ -1680,8 +1715,8 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	c_rays.clear();
 
 	random_t prng_rs(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-	RayStorer rs(a, n_samples, offset, this, prng_rs);
-	rs.genRays();
+	RayStorer raygen_rs(a, n_samples, offset, this, prng_rs);
+	raygen_rs.genRays();
 
 	std::vector<PHRay> rays;
 	rays.resize(c_rays.size());
@@ -1698,7 +1733,10 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	queue->writeBuffer(d_rays, 0, d_rays_size, &rays[0], &err);
 	checkErr(err, "failed to write d_rays");
 
-	std::vector<int> inter_tris;
+	random_t prng_rt(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
+	RenderTile_PrimaryRayGenerator raygen_rt(a, n_samples, offset, adaptive, threadID, this, prng_rt);
+
+	std::vector<int> &inter_tris = raygen_rt.getRenderState().inter_tris;
 	inter_tris.resize(rays.size());
 
 	int d_inter_tris_size = inter_tris.size() * sizeof(int);
@@ -1749,7 +1787,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	d_rays->free(&err);
 	checkErr(err, "failed to free d_rays");
 
-	{
+	/*{
 		std::vector<PHInternalNode> &int_nodes = pHierarchy.int_nodes;
 		std::vector<PHLeaf> &leaves = pHierarchy.leaves;
 		std::vector<PHTriangle> &tris = pHierarchy.tris;
@@ -1766,7 +1804,8 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 				std::vector<int> candidates;
 				//test_intersect_kd(ray, candidates, leaf_radius, t);
 				//test_intersect_sh(ray, candidates, leaf_radius);
-				test_intersect_brute(ray, candidates, leaf_radius);
+				//test_intersect_brute(ray, candidates, leaf_radius);
+				test_intersect_stored(ray, candidates, raygen_rt.getRenderState());
 
 				if(!found) {
 					if(!candidates.empty()) {
@@ -1838,11 +1877,8 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 				break;
 			}
 		}
-	}
+	}*/
 
-
-	random_t prng_rt(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-	RenderTile_PrimaryRayGenerator raygen_rt(a, n_samples, offset, adaptive, threadID, this, prng_rt);
 	raygen_rt.genRays();
 	return true;
 }
@@ -2039,7 +2075,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 		){
 			PHRay ray = rays[get_global_id(0)];
 			float t_cand = FLT_MAX;
-			int cand;
+			int cand_tri;
 \n
 			unsigned int stack = 0;
 			unsigned int mask = 1;
@@ -2113,7 +2149,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 							t = dot(edge2,qvec) * inv_det;
 							if(t < t_cand) {
 								t_cand = t;
-								cand = poz - nr_int_nodes;
+								cand_tri = l.tri_idx;
 							}
 						}
 						break;
@@ -2128,7 +2164,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 				{
 					mask >>= 1;
 					if(!mask) {
-						inter_tris[get_global_id(0)] = cand;
+						inter_tris[get_global_id(0)] = cand_tri;
 						return;
 					}
 					if(stack & mask) {
