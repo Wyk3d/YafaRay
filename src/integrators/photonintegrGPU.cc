@@ -928,7 +928,7 @@ color_t photonIntegratorGPU_t::finalGathering(renderState_t &state, const surfac
 
 bool photonIntegratorGPU_t::getSPfromHit(const diffRay_t &ray, int tri_idx, surfacePoint_t &sp) const
 {
-	if(tri_idx == 0)
+	if(tri_idx == -1)
 		return false;
 
 	unsigned char udat[PRIM_DAT_SIZE];
@@ -1958,7 +1958,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			c[2] = a[2]+b[2];
 		}
 
-		void cross(float a[3], float b[3], float c[3]) { // c = a ^ b
+		void _cross(float a[3], float b[3], float c[3]) { // c = a ^ b
 			c[0] = a[1]*b[2]-a[2]*b[1];
 			c[1] = a[2]*b[0]-a[0]*b[2];
 			c[2] = a[0]*b[1]-a[1]*b[0];
@@ -1970,7 +1970,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			b[2] = t * a[2];
 		}
 
-		float dot(float a[3], float b[3]) {	// ret = a * b
+		float _dot(float a[3], float b[3]) {	// ret = a * b
 			return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 		}
 
@@ -1997,14 +1997,14 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			for(int i = 0; i < nr_int_nodes; ++i)
 			{
 				PHLeaf l = leaves[i];
-				float nr = dot(l.n, ray.r);
+				float nr = _dot(l.n, ray.r);
 				if(nr >= 0) {
 					continue;
 				}
 \n
 				float pm[3];
 				sub(l.m, ray.p, pm);
-				float t = dot(l.n, pm) / nr;
+				float t = _dot(l.n, pm) / nr;
 				float rt[3];
 				mul(ray.r, t, rt);
 				float q[3];
@@ -2038,21 +2038,21 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 					float det, inv_det, u, v;
 					sub(tri.b, tri.a, edge1);
 					sub(tri.c, tri.a, edge2);
-					cross(ray.r, edge2, pvec);
-					det = dot(edge1, pvec);
+					_cross(ray.r, edge2, pvec);
+					det = _dot(edge1, pvec);
 					//if (/*(det>-0.000001) && (det<0.000001))
 					if (det == 0.0)
 						continue;
 					inv_det = 1.0 / det;
 					sub(ray.p, tri.a, tvec);
-					u = dot(tvec,pvec) * inv_det;
+					u = _dot(tvec,pvec) * inv_det;
 					if (u < 0.0 || u > 1.0)
 						continue;
-					cross(tvec,edge1,qvec);
-					v = dot(ray.r,qvec) * inv_det;
+					_cross(tvec,edge1,qvec);
+					v = _dot(ray.r,qvec) * inv_det;
 					if ((v<0.0) || ((u+v)>1.0) )
 						continue;
-					t = dot(edge2,qvec) * inv_det;
+					t = _dot(edge2,qvec) * inv_det;
 					if(t < t_cand) {
 						t_cand = t;
 						cand = i;
@@ -2075,7 +2075,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 		){
 			PHRay ray = rays[get_global_id(0)];
 			float t_cand = FLT_MAX;
-			int cand_tri;
+			int cand_tri = -1;
 \n
 			unsigned int stack = 0;
 			unsigned int mask = 1;
@@ -2088,7 +2088,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 						float pc[3];
 						sub(n.c, ray.p, pc);
 						float pcxr[3];
-						cross(pc, ray.r, pcxr);
+						_cross(pc, ray.r, pcxr);
 						float d2 = normSqr(pcxr);
 						float r2 = n.r * n.r;
 						if(d2 > r2) {
@@ -2101,7 +2101,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 							// is q in ray's direction ?
 							// if p outside sphere and the line intersects the sphere
 							// then c must lie roughly in the ray's direction
-							float pcr = dot(pc, ray.r);
+							float pcr = _dot(pc, ray.r);
 							if(pcr <= 0) {
 								break;
 							}
@@ -2110,14 +2110,14 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 \n
 					} else { // check leaf
 						PHLeaf l = leaves[poz - nr_int_nodes];
-						float nr = dot(l.n, ray.r);
+						float nr = _dot(l.n, ray.r);
 						if(nr >= 0) {
 							break;
 						}
 \n
 						float pm[3];
 						sub(l.m, ray.p, pm);
-						float t = dot(l.n, pm) / nr;
+						float t = _dot(l.n, pm) / nr;
 						float rt[3];
 						mul(ray.r, t, rt);
 						float q[3];
@@ -2132,21 +2132,21 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 							float det, inv_det, u, v;
 							sub(tri.b, tri.a, edge1);
 							sub(tri.c, tri.a, edge2);
-							cross(ray.r, edge2, pvec);
-							det = dot(edge1, pvec);
+							_cross(ray.r, edge2, pvec);
+							det = _dot(edge1, pvec);
 							//if (/*(det>-0.000001) && (det<0.000001))
 							if (det == 0.0)
 								break;
 							inv_det = 1.0 / det;
 							sub(ray.p, tri.a, tvec);
-							u = dot(tvec,pvec) * inv_det;
+							u = _dot(tvec,pvec) * inv_det;
 							if (u < 0.0 || u > 1.0)
 								break;
-							cross(tvec,edge1,qvec);
-							v = dot(ray.r,qvec) * inv_det;
+							_cross(tvec,edge1,qvec);
+							v = _dot(ray.r,qvec) * inv_det;
 							if ((v<0.0) || ((u+v)>1.0) )
 								break;
-							t = dot(edge2,qvec) * inv_det;
+							t = _dot(edge2,qvec) * inv_det;
 							if(t < t_cand) {
 								t_cand = t;
 								cand_tri = l.tri_idx;
