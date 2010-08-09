@@ -109,12 +109,62 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		CLDevice getOpenCLDevice();
 		CLPlatform getOpenCLPlatform();
 
-		void test_intersect_sh(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius);
-		void test_intersect_brute(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius);
-		void test_intersect_kd(diffRay_t &ray, std::vector<int> &candidates, float leaf_radius, float t_comp);
-		void test_intersect_stored(diffRay_t &ray, std::vector<int> &candidates, renderState_t &t);
 		void upload_hierarchy(PHierarchy &ph);
 
+		friend class RayTest;
+
+		struct RayTest
+		{
+			photonIntegratorGPU_t &pi;
+			std::vector<PHInternalNode> &int_nodes;
+			std::vector<PHLeaf> &leaves;
+			std::vector<PHTriangle> &tris;
+			float leaf_radius;
+			scene_t *scene;
+			std::vector<const triangle_t*> &prims;
+
+			bool set_test;
+			bool hit_test;
+			const triangle_t *tri_test;
+			point3d_t p_test;
+			float t_test;
+			int tri_idx_test;
+
+			std::vector<int> cand_leaves;
+			std::vector<int> cand_tris;
+
+			renderState_t *state;
+			diffRay_t ray;
+
+			surfacePoint_t sp_ref;
+			float t_ref;
+			bool hit_ref;
+
+			RayTest(photonIntegratorGPU_t &pi, PHierarchy &ph)
+				: pi(pi), int_nodes(ph.int_nodes), leaves(ph.leaves), tris(ph.tris),
+				leaf_radius(ph.leaf_radius), scene(pi.scene), prims(pi.prims)
+			{
+
+			}
+
+			void test_rays(renderState_t &state);
+			void init_test(const diffRay_t &ray);
+
+			void test_intersect_sh();
+			void test_intersect_brute();
+			void test_intersect_kd();
+			void test_intersect_stored();
+
+			void from_cand_leaves();
+			void from_cand_tris();
+
+			void from_tri_idx(int tri_idx);
+			void from_leaf_idx(int leaf_idx);
+
+			void list_ray_candidates();
+		};
+
+		
 		bool getSPforRay(const diffRay_t &ray, renderState_t &rstate, surfacePoint_t &sp) const;
 		bool getSPfromHit(const diffRay_t &ray, int tri_idx, surfacePoint_t &sp) const;
 		
