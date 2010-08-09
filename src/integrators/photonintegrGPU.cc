@@ -1765,8 +1765,8 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 
 				std::vector<int> candidates;
 				//test_intersect_kd(ray, candidates, leaf_radius, t);
-				test_intersect_sh(ray, candidates, leaf_radius);
-				//test_intersect_brute(ray, candidates, leaf_radius);
+				//test_intersect_sh(ray, candidates, leaf_radius);
+				test_intersect_brute(ray, candidates, leaf_radius);
 
 				if(!found) {
 					if(!candidates.empty()) {
@@ -1865,7 +1865,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 	int d_tris_size = ph.tris.size() * sizeof(PHTriangle);
 	d_tris = context->createBuffer(CL_MEM_READ_WRITE, d_tris_size, NULL, &err);
 	checkErr(err || !d_tris, "failed to create leaf buffer");
-	queue->writeBuffer(d_tris, 0, d_tris_size, &ph.leaves[0], &err);
+	queue->writeBuffer(d_tris, 0, d_tris_size, &ph.tris[0], &err);
 	checkErr(err, "failed to write d_tris");
 
 	char * kernel_src = CL_SRC(
@@ -1942,6 +1942,91 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			return a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
 		}
 \n
+		__kernel void intersect_rays_test(
+			 __global PHInternalNode *int_nodes, 
+			 int nr_int_nodes,
+			 __global PHLeaf *leaves,
+			 float leaf_radius,
+			 __global PHTriangle *tris,
+			 __global PHRay *rays,
+			 int nr_rays,
+			 __global int *inter_tris
+		){
+			//inter_tris[get_global_id(0)] = get_global_id(0);
+
+			PHRay ray = rays[get_global_id(0)];
+			int cand = -1;
+			float t_cand = 100000000.0f;
+
+			for(int i = 0; i < nr_int_nodes; ++i)
+			{
+				PHLeaf l = leaves[i];
+				float nr = dot(l.n, ray.r);
+				if(nr >= 0) {
+					continue;
+				}
+\n
+				float pm[3];
+				sub(l.m, ray.p, pm);
+				float t = dot(l.n, pm) / nr;
+				float rt[3];
+				mul(ray.r, t, rt);
+				float q[3];
+				add(ray.p, rt, q);
+				float mq[3];
+				sub(q, l.m, mq);
+				float d2 = normSqr(mq);
+				float r2 = leaf_radius * leaf_radius;
+				if(d2 < r2) {
+					/*vector3d_t edge1, edge2, tvec, pvec, qvec;
+					PFLOAT det, inv_det, u, v;
+					edge1 = tri.b - tri.a;
+					edge2 = tri.c - tri.a;
+					pvec = ray.dir ^ edge2;
+					det = edge1 * pvec;
+					if ( det == 0.0)
+						break;
+					inv_det = 1.0 / det;
+					tvec = ray.from - tri.a;
+					u = (tvec*pvec) * inv_det;
+					if (u < 0.0 || u > 1.0)
+						break;
+					qvec = tvec^edge1;
+					v = (ray.dir*qvec) * inv_det;
+					if ((v<0.0) || ((u+v)>1.0) )
+						break;
+					t = edge2 * qvec * inv_det;*/
+
+					PHTriangle tri = tris[l.tri_idx];
+					float edge1[3], edge2[3], tvec[3], pvec[3], qvec[3];
+					float det, inv_det, u, v;
+					sub(tri.b, tri.a, edge1);
+					sub(tri.c, tri.a, edge2);
+					cross(ray.r, edge2, pvec);
+					det = dot(edge1, pvec);
+					//if (/*(det>-0.000001) && (det<0.000001))
+					if (det == 0.0)
+						continue;
+					inv_det = 1.0 / det;
+					sub(ray.p, tri.a, tvec);
+					u = dot(tvec,pvec) * inv_det;
+					if (u < 0.0 || u > 1.0)
+						continue;
+					cross(tvec,edge1,qvec);
+					v = dot(ray.r,qvec) * inv_det;
+					if ((v<0.0) || ((u+v)>1.0) )
+						continue;
+					t = dot(edge2,qvec) * inv_det;
+					if(t < t_cand) {
+						t_cand = t;
+						cand = i;
+					}
+				}
+			}
+
+			inter_tris[get_global_id(0)] = cand;
+		}
+\n
 		__kernel void intersect_rays(
 			__global PHInternalNode *int_nodes, 
 			int nr_int_nodes,
@@ -1955,7 +2040,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			PHRay ray = rays[get_global_id(0)];
 			float t_cand = FLT_MAX;
 			int cand;
-
+\n
 			unsigned int stack = 0;
 			unsigned int mask = 1;
 			unsigned int poz = 1;
@@ -1973,7 +2058,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 						if(d2 > r2) {
 							break;
 						}
-
+\n
 						// is p inside sphere ?
 						if(normSqr(pc) > r2) {
 							// exists q on line such that q in sphere
@@ -1986,14 +2071,14 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 							}
 							// exists t >= pcr >= 0 => found
 						}
-
+\n
 					} else { // check leaf
 						PHLeaf l = leaves[poz - nr_int_nodes];
 						float nr = dot(l.n, ray.r);
 						if(nr >= 0) {
 							break;
 						}
-
+\n
 						float pm[3];
 						sub(l.m, ray.p, pm);
 						float t = dot(l.n, pm) / nr;
@@ -2033,17 +2118,19 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 						}
 						break;
 					}
-
+\n
 					stack |= mask;
 					mask <<= 1;
 					poz *= 2;
 				}
-
+\n
 				while(1) // going up
 				{
 					mask >>= 1;
-					if(!mask)
+					if(!mask) {
+						inter_tris[get_global_id(0)] = cand;
 						return;
+					}
 					if(stack & mask) {
 						// traverse sibling
 						stack &= ~mask;
@@ -2054,8 +2141,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 					poz /= 2;
 				}
 			}
-
-			inter_tris[get_global_id(0)] = cand;
+\n
 		}
 	);
 
