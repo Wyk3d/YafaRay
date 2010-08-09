@@ -950,35 +950,40 @@ bool photonIntegratorGPU_t::getSPfromHit(const diffRay_t &ray, int tri_idx, surf
 
 bool photonIntegratorGPU_t::getSPforRay(const diffRay_t &ray, renderState_t &rstate, surfacePoint_t &sp) const
 {
+	if(ray.idx < 0)
+		return scene->intersect(ray, sp);
+
 	int tri_idx = rstate.inter_tris[ray.idx];
 	return getSPfromHit(ray, tri_idx, sp);
 }
 
 colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) const
 {
-	const diffRay_t &orig_ray = c_rays[ray.idx];
-	float from_diff = (ray.from - orig_ray.from).length();
-	float xfrom_diff = (ray.xfrom - orig_ray.xfrom).length();
-	float yfrom_diff = (ray.yfrom - orig_ray.yfrom).length();
+	if(ray.idx >= 0) {
+		const diffRay_t &orig_ray = state.c_rays[ray.idx];
+		float from_diff = (ray.from - orig_ray.from).length();
+		float xfrom_diff = (ray.xfrom - orig_ray.xfrom).length();
+		float yfrom_diff = (ray.yfrom - orig_ray.yfrom).length();
 
-	float dir_diff = 1.0 - (ray.dir * orig_ray.dir) / ray.dir.length() / orig_ray.dir.length();
-	float xdir_diff = 1.0 - (ray.xdir * orig_ray.xdir) / ray.xdir.length() / orig_ray.xdir.length();
-	float ydir_diff = 1.0 - (ray.ydir * orig_ray.ydir) / ray.ydir.length() / orig_ray.ydir.length();
+		float dir_diff = 1.0 - (ray.dir * orig_ray.dir) / ray.dir.length() / orig_ray.dir.length();
+		float xdir_diff = 1.0 - (ray.xdir * orig_ray.xdir) / ray.xdir.length() / orig_ray.xdir.length();
+		float ydir_diff = 1.0 - (ray.ydir * orig_ray.ydir) / ray.ydir.length() / orig_ray.ydir.length();
 
-	bool hasDif_diff = ray.hasDifferentials != orig_ray.hasDifferentials;
+		bool hasDif_diff = ray.hasDifferentials != orig_ray.hasDifferentials;
 
-	float tmin_diff = fabs(ray.tmin - orig_ray.tmin);
-	float tmax_diff = fabs(ray.tmax - orig_ray.tmax);
-	float time_diff = fabs(ray.time - orig_ray.time);
-	if(from_diff > 1e-5 || yfrom_diff > 1e-5 || xfrom_diff > 1e-5 ||
-		dir_diff > 1e-5 || xdir_diff > 1e-5 || ydir_diff > 1e-5 || 
-		hasDif_diff ||
-		time_diff > 1e-5 || tmin_diff > 1e-5) {
-		Y_ERROR << "different ray parameters" << yendl;
-	}
+		float tmin_diff = fabs(ray.tmin - orig_ray.tmin);
+		float tmax_diff = fabs(ray.tmax - orig_ray.tmax);
+		float time_diff = fabs(ray.time - orig_ray.time);
+		if(from_diff > 1e-5 || yfrom_diff > 1e-5 || xfrom_diff > 1e-5 ||
+			dir_diff > 1e-5 || xdir_diff > 1e-5 || ydir_diff > 1e-5 || 
+			hasDif_diff ||
+			time_diff > 1e-5 || tmin_diff > 1e-5) {
+			Y_ERROR << "different ray parameters" << yendl;
+		}
 
-	if(tmax_diff > 1e-5) {
-		//Y_ERROR << "different tmax" << yendl;
+		if(tmax_diff > 1e-5) {
+			//Y_ERROR << "different tmax" << yendl;
+		}
 	}
 
 	static int _nMax=0;
@@ -1695,27 +1700,34 @@ void photonIntegratorGPU_t::test_intersect_stored(diffRay_t &ray, std::vector<in
 bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID)
 {
 	class RayStorer : public tiledIntegrator_t::PrimaryRayGenerator {
+		protected:
+			std::vector<diffRay_t> &c_rays;
 		public:
 			RayStorer(
 				renderArea_t &a, int n_samples, int offset, 
-				tiledIntegrator_t *integrator, random_t &prng
-			) : PrimaryRayGenerator(a, n_samples, offset, integrator, prng) 
+				tiledIntegrator_t *integrator, random_t &prng,
+				std::vector<diffRay_t> &c_rays
+			) : PrimaryRayGenerator(a, n_samples, offset, integrator, prng),
+				c_rays(c_rays)
 			{
 
-			}
-			photonIntegratorGPU_t *parent() {
-				return (photonIntegratorGPU_t*)integrator;
 			}
 			void rays(diffRay_t &c_ray, int i, int j, int dx, int dy, float wt)
 			{
-				parent()->c_rays.push_back(c_ray);
+				c_rays.push_back(c_ray);
 			}
 	};
 
-	c_rays.clear();
+	random_t prng_rt(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
+	RenderTile_PrimaryRayGenerator raygen_rt(a, n_samples, offset, adaptive, threadID, this, prng_rt);
+
+	renderState_t &state = raygen_rt.getRenderState();
+	std::vector<diffRay_t> &c_rays = state.c_rays;
+	std::vector<int> &inter_tris = state.inter_tris;
 
 	random_t prng_rs(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-	RayStorer raygen_rs(a, n_samples, offset, this, prng_rs);
+	RayStorer raygen_rs(a, n_samples, offset, this, prng_rs, c_rays);
+	
 	raygen_rs.genRays();
 
 	std::vector<PHRay> rays;
@@ -1733,10 +1745,6 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	queue->writeBuffer(d_rays, 0, d_rays_size, &rays[0], &err);
 	checkErr(err, "failed to write d_rays");
 
-	random_t prng_rt(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-	RenderTile_PrimaryRayGenerator raygen_rt(a, n_samples, offset, adaptive, threadID, this, prng_rt);
-
-	std::vector<int> &inter_tris = raygen_rt.getRenderState().inter_tris;
 	inter_tris.resize(rays.size());
 
 	int d_inter_tris_size = inter_tris.size() * sizeof(int);

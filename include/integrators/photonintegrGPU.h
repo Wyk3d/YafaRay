@@ -139,7 +139,6 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		bool hasBGLight;
 
 		friend class RayStorer;
-		std::vector<diffRay_t> c_rays;
 		DiskVectorType disks;
 		PHierarchy pHierarchy;
 		std::vector<const triangle_t*> prims;

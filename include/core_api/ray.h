@@ -24,10 +24,10 @@ public:
 class diffRay_t: public ray_t
 {
 	public:
-		diffRay_t(): ray_t(), hasDifferentials(false) {}
-		diffRay_t(const ray_t &r): ray_t(r), hasDifferentials(false) {}
+		diffRay_t(): ray_t(), hasDifferentials(false), idx(-1) {}
+		diffRay_t(const ray_t &r): ray_t(r), hasDifferentials(false), idx(-1) {}
 		diffRay_t(const point3d_t &f, const vector3d_t &d, PFLOAT start=0.0, PFLOAT end=-1.0, PFLOAT ftime=0.0):
-			ray_t(f, d, start, end, ftime), hasDifferentials(false) {}
+			ray_t(f, d, start, end, ftime), hasDifferentials(false), idx(-1) {}
 		bool hasDifferentials;
 		point3d_t xfrom, yfrom;
 		vector3d_t xdir, ydir;

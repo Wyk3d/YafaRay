@@ -77,6 +77,7 @@ struct YAFRAYCORE_EXPORT renderState_t
 	random_t *const prng; //!< a pseudorandom number generator
 
 	std::vector<int> inter_tris; //!< indices to intersected triangles
+	std::vector<diffRay_t> c_rays; // temp: the rays that are to be intersected on the GPU
 	
 	//! set some initial values that are always the same before integrating a primary ray
 	void setDefaults()
