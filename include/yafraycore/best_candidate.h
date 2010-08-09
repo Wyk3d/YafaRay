@@ -18,34 +18,33 @@ protected:
 	ContainerIteratorType container_iter;
 	FuncHolder funcHolder;
 public:
-	MemberIterator(const FuncHolder &funcHolder, const ContainerIteratorType &iter) :
-	  container_iter(iter), funcHolder(funcHolder) {}
+	MemberIterator(const FuncHolder &funcHolder, const ContainerIteratorType &iter)
+		: container_iter(iter), funcHolder(funcHolder) {}
 
-	  MemberIterator(const MemberIterator &iter) {
-		  container_iter = iter->container_iter;
-	  }
+	MemberIterator(const MemberIterator &iter)
+		: container_iter(iter.container_iter), funcHolder(iter.funcHolder) {}
 
-	  MemberType &operator *() {
-		  return ((&funcHolder)->*GetMemberFunc)(typename ContainerIteratorType::reference(*container_iter));
-	  }
+	MemberType &operator *() {
+	  return ((&funcHolder)->*GetMemberFunc)(typename ContainerIteratorType::reference(*container_iter));
+	}
 
-	  MemberIterator& operator++() {
-		  ++container_iter;
-		  return *this;
-	  }
+	MemberIterator& operator++() {
+	  ++container_iter;
+	  return *this;
+	}
 
-	  MemberIterator& operator--() {
-		  --container_iter;
-		  return *this;
-	  }
+	MemberIterator& operator--() {
+	  --container_iter;
+	  return *this;
+	}
 
-	  bool operator == (const MemberIterator &iter) {
-		  return container_iter == iter.container_iter;
-	  }
+	bool operator == (const MemberIterator &iter) {
+	  return container_iter == iter.container_iter;
+	}
 
-	  bool operator != (const MemberIterator &iter) {
-		  return !((*this)==iter);
-	  }
+	bool operator != (const MemberIterator &iter) {
+	  return !((*this)==iter);
+	}
 };
 
 class BestCandidateSampler {
@@ -148,7 +147,7 @@ public:
 
 		cands.resize(nr_to_generate);
 
-		printf("generating %d candiates\n", nr_to_generate);
+		Y_INFO << "generating " << nr_to_generate << " candiates" << yendl;
 
 		for(int j = 0; j < nr_to_generate; j++)
 		{
@@ -169,7 +168,7 @@ public:
 			// generate the difference
 		}
 
-		printf("generating %d samples of %d\n", nr_to_keep, nr_to_generate);
+		Y_INFO << "generating " << nr_to_keep << " samples of " << nr_to_generate << yendl;
 
 
 		int ppoz = 0;

@@ -52,7 +52,7 @@ class YAFRAYCORE_EXPORT integrator_t
 		enum TYPE { SURFACE, VOLUME };
 		TYPE integratorType(){ return type; }
 
-		integrator_t() : intpb(NULL), scene(NULL) { }
+		integrator_t() : scene(NULL), intpb(NULL) { }
 	protected:
 		TYPE type;
 		scene_t *scene;
@@ -84,7 +84,7 @@ class YAFRAYCORE_EXPORT volumeIntegrator_t: public integrator_t
 		virtual colorA_t transmittance(renderState_t &state, ray_t &ray) const = 0;
 		virtual colorA_t integrate(renderState_t &state, ray_t &ray) const = 0;
 		virtual bool preprocess() { return true; };
-	
+
 	protected:
 };
 
