@@ -41,9 +41,10 @@ void photonIntegratorGPU_t::RayTest::init_test(const diffRay_t &diff_ray)
 	cand_tris.clear();
 }
 
-void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &state)
+void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &r_state)
 {
-	std::vector<diffRay_t> &c_rays = state.c_rays;
+	state = &r_state;
+	std::vector<diffRay_t> &c_rays = state->c_rays;
 
 	for(std::vector<diffRay_t>::iterator itr = c_rays.begin(), next; itr != c_rays.end(); itr = next)
 	{
@@ -60,17 +61,10 @@ void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &state)
 			t_ref = (p_ref.x - ray.from.x) / ray.dir.x;
 		}
 
-		//test_intersect_sh();
-		//test_intersect_kd();
-		//test_intersect_brute();
-		test_intersect_stored();
-
-		if(!set_test) {
-			if(!cand_leaves.empty())
-				from_cand_leaves();
-			if(!cand_tris.empty())
-				from_cand_tris();
-		}
+		test_intersect_sh();			from_cand_leaves();
+		//test_intersect_kd();			from_cand_leaves();
+		//test_intersect_brute();		from_cand_leaves();
+		//test_intersect_stored();
 
 		if(!set_test) {
 			Y_ERROR << "test was not set" << yendl;
@@ -101,7 +95,8 @@ void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &state)
 
 		if(failed) 
 		{
-
+			static bool on = true;
+			if(on) list_ray_candidates();
 		}
 	}
 	return;
@@ -110,7 +105,7 @@ void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &state)
 void photonIntegratorGPU_t::RayTest::list_ray_candidates()
 {
 	bool found = false;
-	for(int i = 0; i < leaves.size(); ++i) {
+	for(int i = 0; i < (int)leaves.size(); ++i) {
 		PHLeaf &l = leaves[i];
 		const triangle_t *tri = prims[l.tri_idx];
 		if(tri == sp_ref.origin) {
@@ -139,7 +134,7 @@ void photonIntegratorGPU_t::RayTest::list_ray_candidates()
 
 void photonIntegratorGPU_t::RayTest::test_intersect_brute()
 {
-	for(int i = 0; i < leaves.size(); ++i) {
+	for(int i = 0; i < (int)leaves.size(); ++i) {
 		PHLeaf &l = leaves[i];
 		float nr = l.n * ray.dir;
 		if(nr >= 0)
@@ -179,7 +174,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_sh()
 	unsigned int poz = 1;
 	while(1) {
 		while(1) { // going down
-			if(poz < int_nodes.size()) { // check internal node
+			if(poz < (unsigned int)int_nodes.size()) { // check internal node
 				nr_int_nodes++;
 
 				PHInternalNode &n = int_nodes[poz];
@@ -300,7 +295,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_kd()
 
 	float t_cand = std::numeric_limits<float>::max();
 
-#define REPORT { if(do_report) if(poz < int_nodes.size()) printf("int %d %f %f\n", poz, tmin, tmax); \
+#define REPORT { if(do_report) if(poz < (int)int_nodes.size()) printf("int %d %f %f\n", poz, tmin, tmax); \
 		else printf("leaf %d %f %f", poz-int_nodes.size(), tmin, tmax); }
 
 #define GO_LEFT  { \
@@ -318,7 +313,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_kd()
 	while(1) {
 		while(1) // going down
 		{
-			if(poz < int_nodes.size()) { // check internal node
+			if(poz < (int)int_nodes.size()) { // check internal node
 				nr_int_nodes++;
 
 				PHInternalNode &n = int_nodes[poz];
@@ -493,7 +488,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_stored()
 		hit_test = false;
 		return;
 	}
-	if(ray.idx < -1 || ray.idx >= state->inter_tris.size())
+	if(ray.idx < -1 || ray.idx >= (int)state->inter_tris.size())
 	{
 		Y_ERROR << "ray_idx = " << ray.idx << yendl;
 		return;
@@ -503,11 +498,15 @@ void photonIntegratorGPU_t::RayTest::test_intersect_stored()
 
 void photonIntegratorGPU_t::RayTest::from_cand_leaves()
 {
-	assert(!cand_leaves.empty());
+	if(cand_leaves.empty()) {
+		set_test = true;
+		hit_test = false;
+		return;
+	}
 
 	float tmin = std::numeric_limits<float>::max();
 	int idx_min = 0;
-	for(int i = 0; i < cand_leaves.size(); ++i) {
+	for(int i = 0; i < (int)cand_leaves.size(); ++i) {
 		int idx = cand_leaves[i];
 		PHLeaf &l = leaves[idx];
 		const triangle_t *tri = prims[l.tri_idx];
@@ -534,7 +533,7 @@ void photonIntegratorGPU_t::RayTest::from_cand_tris()
 
 void photonIntegratorGPU_t::RayTest::from_leaf_idx(int leaf_idx)
 {
-	if(leaf_idx < 0 || leaf_idx >= leaves.size()) {
+	if(leaf_idx < 0 || leaf_idx >= (int)leaves.size()) {
 		Y_ERROR << "leaf_idx = " << leaf_idx << yendl;
 		return;
 	}
@@ -544,8 +543,18 @@ void photonIntegratorGPU_t::RayTest::from_leaf_idx(int leaf_idx)
 
 void photonIntegratorGPU_t::RayTest::from_tri_idx(int tri_idx)
 {
-	if(tri_idx < 0 || tri_idx >= prims.size()) {
+	if(tri_idx < -1) {
 		Y_ERROR << "tri_idx = " << tri_idx << yendl;
+		return;
+	}
+	if(tri_idx >= (int)prims.size()) {
+		Y_ERROR << "tri_idx = " << tri_idx << yendl;
+		return;
+	}
+	if(tri_idx == -1)
+	{
+		hit_test = false;
+		set_test = true;
 		return;
 	}
 

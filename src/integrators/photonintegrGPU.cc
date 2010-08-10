@@ -1370,7 +1370,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 
 	std::vector<PHRay> rays;
 	rays.resize(c_rays.size());
-	for(int i = 0; i < c_rays.size(); ++i)
+	for(int i = 0; i < (int)c_rays.size(); ++i)
 	{
 		rays[i].p = c_rays[i].from;
 		rays[i].r = c_rays[i].dir;
@@ -1755,7 +1755,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 		ret = -1;
 
 		float comp = 0;
-		for(int i = 0; i < ph.int_nodes.size(); ++i) {
+		for(int i = 0; i < (int)ph.int_nodes.size(); ++i) {
 			comp += ph.int_nodes[i].r / ph.int_nodes.size();
 		}
 
