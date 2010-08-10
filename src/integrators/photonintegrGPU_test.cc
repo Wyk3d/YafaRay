@@ -61,10 +61,10 @@ void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &r_state)
 			t_ref = (p_ref.x - ray.from.x) / ray.dir.x;
 		}
 
-		test_intersect_sh();			from_cand_leaves();
+		//test_intersect_sh();			from_cand_leaves();
 		//test_intersect_kd();			from_cand_leaves();
 		//test_intersect_brute();		from_cand_leaves();
-		//test_intersect_stored();
+		test_intersect_stored();
 
 		if(!set_test) {
 			Y_ERROR << "test was not set" << yendl;
@@ -79,7 +79,7 @@ void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &r_state)
 			continue;
 		}
 
-		bool failed = !hit_test;
+		bool failed = false;
 
 		if(hit_test) {
 			float d = (p_ref - p_test).length();
@@ -91,18 +91,19 @@ void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &r_state)
 				Y_ERROR << "tri test != tri ref" << yendl;
 				failed = true;
 			}
-		}
+		} else
+			failed = true;
 
 		if(failed) 
 		{
 			static bool on = true;
-			if(on) list_ray_candidates();
+			if(on) list_ray_candidates(true);
 		}
 	}
 	return;
 }
 
-void photonIntegratorGPU_t::RayTest::list_ray_candidates()
+void photonIntegratorGPU_t::RayTest::list_ray_candidates(bool exact)
 {
 	bool found = false;
 	for(int i = 0; i < (int)leaves.size(); ++i) {
@@ -122,6 +123,13 @@ void photonIntegratorGPU_t::RayTest::list_ray_candidates()
 			float d2 = (q - l.c).lengthSqr();
 			float r2 = leaf_radius * leaf_radius;
 			if(d2 < r2) {
+				if(exact) {
+					PFLOAT t;
+					unsigned char udat2[PRIM_DAT_SIZE];
+					bool good = tri->intersect(ray, &t, udat2);
+					if(!good)
+						continue;
+				}
 				Y_ERROR << "ray should have hit disk " << i << yendl;
 				found = true;
 			}

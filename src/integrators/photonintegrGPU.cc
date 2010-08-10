@@ -1247,7 +1247,8 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<c
 	nr_to_keep.resize(total_prims);
 	int tri_idx = 0;
 
-	float area_multiplier = 2 * sqrt(2.0);
+	//float area_multiplier = 2 * sqrt(2.0);
+	float area_multiplier = 3.5;
 	//float area_multiplier = 1;
 
 	int total_nr_tmp = 0;
@@ -1392,7 +1393,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	queue->writeBuffer(d_inter_tris, 0, d_inter_tris_size, &inter_tris[0], &err); 
 	checkErr(err, "failed to initialize d_inter_tris");
 
-	CLKernel *kernel = program->createKernel("intersect_rays", &err);
+	CLKernel *kernel = program->createKernel("intersect_rays_test2", &err);
 	checkErr(err || !kernel, "failed to create kernel");
 
 	/*
@@ -1402,6 +1403,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 		__global PHLeaf *leaves,
 		float leaf_radius,
 		__global PHTriangle *tris,
+		int nr_tris,
 		__global PHRay *rays,
 		int nr_rays,
 		__global int *inter_tris
@@ -1413,6 +1415,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 		d_leaves,
 		pHierarchy.leaf_radius,
 		d_tris,
+		(int)prims.size(),
 		d_rays,
 		(int)rays.size(),
 		d_inter_tris,
@@ -1535,12 +1538,80 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			return a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
 		}
 \n
+		__kernel void intersect_rays_test2(
+			 __global PHInternalNode *int_nodes, 
+			 int nr_int_nodes,
+			 __global PHLeaf *leaves,
+			 float leaf_radius,
+			 __global PHTriangle *tris,
+			 int nr_tris,
+			 __global PHRay *rays,
+			 int nr_rays,
+			 __global int *inter_tris
+		){
+			//inter_tris[get_global_id(0)] = get_global_id(0);
+
+			PHRay ray = rays[get_global_id(0)];
+			int cand = -1;
+			float t_cand = 100000000.0f;
+
+			for(int i = 0; i < nr_tris; ++i)
+			{
+				/*vector3d_t edge1, edge2, tvec, pvec, qvec;
+				PFLOAT det, inv_det, u, v;
+				edge1 = tri.b - tri.a;
+				edge2 = tri.c - tri.a;
+				pvec = ray.dir ^ edge2;
+				det = edge1 * pvec;
+				if ( det == 0.0)
+					break;
+				inv_det = 1.0 / det;
+				tvec = ray.from - tri.a;
+				u = (tvec*pvec) * inv_det;
+				if (u < 0.0 || u > 1.0)
+					break;
+				qvec = tvec^edge1;
+				v = (ray.dir*qvec) * inv_det;
+				if ((v<0.0) || ((u+v)>1.0) )
+					break;
+				t = edge2 * qvec * inv_det;*/
+
+				PHTriangle tri = tris[i];
+				float edge1[3], edge2[3], tvec[3], pvec[3], qvec[3];
+				float det, inv_det, u, v;
+				sub(tri.b, tri.a, edge1);
+				sub(tri.c, tri.a, edge2);
+				_cross(ray.r, edge2, pvec);
+				det = _dot(edge1, pvec);
+				//if (/*(det>-0.000001) && (det<0.000001))
+				if (det == 0.0f)
+					continue;
+				inv_det = 1.0f / det;
+				sub(ray.p, tri.a, tvec);
+				u = _dot(tvec,pvec) * inv_det;
+				if (u < 0.0f || u > 1.0f)
+					continue;
+				_cross(tvec,edge1,qvec);
+				v = _dot(ray.r,qvec) * inv_det;
+				if ((v<0.0f) || ((u+v)>1.0f) )
+					continue;
+				float t = _dot(edge2,qvec) * inv_det;
+				if(t < t_cand) {
+					t_cand = t;
+					cand = i;
+				}
+			}
+
+			inter_tris[get_global_id(0)] = cand;
+		}
+\n
 		__kernel void intersect_rays_test(
 			 __global PHInternalNode *int_nodes, 
 			 int nr_int_nodes,
 			 __global PHLeaf *leaves,
 			 float leaf_radius,
 			 __global PHTriangle *tris,
+			 int nr_tris,
 			 __global PHRay *rays,
 			 int nr_rays,
 			 __global int *inter_tris
@@ -1571,25 +1642,6 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 				float d2 = normSqr(mq);
 				float r2 = leaf_radius * leaf_radius;
 				if(d2 < r2) {
-					/*vector3d_t edge1, edge2, tvec, pvec, qvec;
-					PFLOAT det, inv_det, u, v;
-					edge1 = tri.b - tri.a;
-					edge2 = tri.c - tri.a;
-					pvec = ray.dir ^ edge2;
-					det = edge1 * pvec;
-					if ( det == 0.0)
-						break;
-					inv_det = 1.0 / det;
-					tvec = ray.from - tri.a;
-					u = (tvec*pvec) * inv_det;
-					if (u < 0.0 || u > 1.0)
-						break;
-					qvec = tvec^edge1;
-					v = (ray.dir*qvec) * inv_det;
-					if ((v<0.0) || ((u+v)>1.0) )
-						break;
-					t = edge2 * qvec * inv_det;*/
-
 					PHTriangle tri = tris[l.tri_idx];
 					float edge1[3], edge2[3], tvec[3], pvec[3], qvec[3];
 					float det, inv_det, u, v;
@@ -1598,21 +1650,21 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 					_cross(ray.r, edge2, pvec);
 					det = _dot(edge1, pvec);
 					//if (/*(det>-0.000001) && (det<0.000001))
-					if (det == 0.0)
+					if (det == 0.0f)
 						continue;
-					inv_det = 1.0 / det;
+					inv_det = 1.0f / det;
 					sub(ray.p, tri.a, tvec);
 					u = _dot(tvec,pvec) * inv_det;
-					if (u < 0.0 || u > 1.0)
+					if (u < 0.0f || u > 1.0f)
 						continue;
 					_cross(tvec,edge1,qvec);
 					v = _dot(ray.r,qvec) * inv_det;
-					if ((v<0.0) || ((u+v)>1.0) )
+					if ((v<0.0f) || ((u+v)>1.0f) )
 						continue;
 					t = _dot(edge2,qvec) * inv_det;
 					if(t < t_cand) {
 						t_cand = t;
-						cand = i;
+						cand = l.tri_idx;
 					}
 				}
 			}
@@ -1626,6 +1678,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			__global PHLeaf *leaves,
 			float leaf_radius,
 			__global PHTriangle *tris,
+			int nr_tris,
 			__global PHRay *rays,
 			int nr_rays,
 			__global int *inter_tris
@@ -1692,16 +1745,16 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 							_cross(ray.r, edge2, pvec);
 							det = _dot(edge1, pvec);
 							//if (/*(det>-0.000001) && (det<0.000001))
-							if (det == 0.0)
+							if (det == 0.0f)
 								break;
-							inv_det = 1.0 / det;
+							inv_det = 1.0f / det;
 							sub(ray.p, tri.a, tvec);
 							u = _dot(tvec,pvec) * inv_det;
-							if (u < 0.0 || u > 1.0)
+							if (u < 0.0f || u > 1.0f)
 								break;
 							_cross(tvec,edge1,qvec);
 							v = _dot(ray.r,qvec) * inv_det;
-							if ((v<0.0) || ((u+v)>1.0) )
+							if ((v<0.0f) || ((u+v)>1.0f) )
 								break;
 							t = _dot(edge2,qvec) * inv_det;
 							if(t < t_cand) {

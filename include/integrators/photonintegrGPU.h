@@ -161,7 +161,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 			void from_tri_idx(int tri_idx);
 			void from_leaf_idx(int leaf_idx);
 
-			void list_ray_candidates();
+			void list_ray_candidates(bool exact = false);
 		};
 
 		
