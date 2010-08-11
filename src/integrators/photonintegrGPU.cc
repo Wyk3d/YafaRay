@@ -1423,7 +1423,12 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	);
 	checkErr(err, "failed to set kernel args");
 
-	queue->runKernel(kernel, Range1D(rays.size(), 1), &err);
+	int local_size = 32;
+	int global_size = rays.size();
+	if(global_size % local_size != 0) 
+		global_size = (global_size / local_size + 1) * (local_size);
+
+	queue->runKernel(kernel, Range1D(global_size, local_size), &err);
 	checkErr(err, "failed to run kernel");
 
 	queue->readBuffer(d_inter_tris, 0, d_inter_tris_size, &inter_tris[0], &err);
@@ -1436,8 +1441,8 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	d_rays->free(&err);
 	checkErr(err, "failed to free d_rays");
 
-	RayTest test(*this, this->pHierarchy);
-	test.test_rays(state);
+	//RayTest test(*this, this->pHierarchy);
+	//test.test_rays(state);
 
 	raygen_rt.genRays();
 	return true;
@@ -1549,7 +1554,8 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			 int nr_rays,
 			 __global int *inter_tris
 		){
-			//inter_tris[get_global_id(0)] = get_global_id(0);
+			if(get_global_id(0) >= nr_rays)
+				return;
 
 			PHRay ray = rays[get_global_id(0)];
 			int cand = -1;
@@ -1616,7 +1622,8 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			 int nr_rays,
 			 __global int *inter_tris
 		){
-			//inter_tris[get_global_id(0)] = get_global_id(0);
+			if(get_global_id(0) >= nr_rays)
+				return;
 
 			PHRay ray = rays[get_global_id(0)];
 			int cand = -1;
@@ -1683,6 +1690,9 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			int nr_rays,
 			__global int *inter_tris
 		){
+			if(get_global_id(0) >= nr_rays)
+				return;
+
 			PHRay ray = rays[get_global_id(0)];
 			float t_cand = FLT_MAX;
 			int cand_tri = -1;
