@@ -1378,30 +1378,25 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	}
 
 	CLError err;
-	int d_rays_size = rays.size() * sizeof(PHRay);
-	CLBuffer *d_rays = context->createBuffer(CL_MEM_READ_WRITE, d_rays_size, NULL, &err);
+	CLBuffer *d_rays = context->createBuffer(rays, &err);
 	checkErr(err || !d_rays, "failed to create internal node buffer");
-	queue->writeBuffer(d_rays, 0, d_rays_size, &rays[0], &err);
+	queue->writeBuffer(d_rays, rays, &err);
 	checkErr(err, "failed to write d_rays");
 
 	inter_tris.resize(rays.size());
 
-	int d_inter_tris_size = inter_tris.size() * sizeof(int);
-	CLBuffer *d_inter_tris = context->createBuffer(CL_MEM_READ_WRITE, d_inter_tris_size, NULL, &err);
+	CLBuffer *d_inter_tris = context->createBuffer(inter_tris, &err);
 	checkErr(err || !d_inter_tris, "failed to create internal node buffer");
 	// initialize
-	queue->writeBuffer(d_inter_tris, 0, d_inter_tris_size, &inter_tris[0], &err); 
+	queue->writeBuffer(d_inter_tris, inter_tris, &err); 
 	checkErr(err, "failed to initialize d_inter_tris");
 
 	CLKernel *kernel = program->createKernel("intersect_rays_test", &err);
 	checkErr(err || !kernel, "failed to create kernel");
 
-	CLVectorBuffer<float> dbg_nr(rays.size());
-	CLVectorBuffer<float> dbg_d2(rays.size());
-	queue->writeBuffer(dbg_nr, &err);
-	checkErr(err, "failed to init dbg_nr");
-	queue->writeBuffer(dbg_d2, &err);
-	checkErr(err, "failed to init dbg_d2");
+	CLVectorBuffer<float> dbg(8*rays.size());
+	queue->writeBuffer(dbg, &err);
+	checkErr(err, "failed to init dbg");
 
 	/*
 	__kernel void intersect_rays(
@@ -1426,8 +1421,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 		d_rays,
 		(int)rays.size(),
 		d_inter_tris,
-		dbg_nr,
-		dbg_d2,
+		dbg,
 		&err
 	);
 	checkErr(err, "failed to set kernel args");
@@ -1440,13 +1434,15 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	queue->runKernel(kernel, Range1D(global_size, local_size), &err);
 	checkErr(err, "failed to run kernel");
 
-	queue->readBuffer(d_inter_tris, 0, d_inter_tris_size, &inter_tris[0], &err);
+	queue->readBuffer(d_inter_tris, inter_tris, &err);
 	checkErr(err, "failed to read inter_tris");
 
-	queue->readBuffer(dbg_nr, &err);
+	queue->readBuffer(dbg, &err);
 	checkErr(err, "failed to read dbg_nr");
-	queue->readBuffer(dbg_d2, &err);
-	checkErr(err, "failed to read dbg_d2");
+	std::vector<PHLeaf> tmp_leaves;
+	tmp_leaves.resize(pHierarchy.leaves.size());
+	queue->readBuffer(d_leaves, &tmp_leaves[0], &err);
+	checkErr(err, "failed to read tmp leaves");
 
 	kernel->free(&err);
 	checkErr(err, "failed to free kernel");
@@ -1465,22 +1461,19 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 {
 	CLError err;
-	int d_int_nodes_size = ph.int_nodes.size() * sizeof(PHInternalNode);
-	d_int_nodes = context->createBuffer(CL_MEM_READ_WRITE, d_int_nodes_size, NULL, &err);
+	d_int_nodes = context->createBuffer(ph.int_nodes, &err);
 	checkErr(err || !d_int_nodes, "failed to create internal node buffer");
-	queue->writeBuffer(d_int_nodes, 0, d_int_nodes_size, &ph.int_nodes[0], &err);
+	queue->writeBuffer(d_int_nodes, ph.int_nodes, &err);
 	checkErr(err, "failed to write d_int_nodes");
 
-	int d_leaves_size = ph.leaves.size() * sizeof(PHInternalNode);
-	d_leaves = context->createBuffer(CL_MEM_READ_WRITE, d_leaves_size, NULL, &err);
+	d_leaves = context->createBuffer(ph.leaves, &err);
 	checkErr(err || !d_leaves, "failed to create leaf buffer");
-	queue->writeBuffer(d_leaves, 0, d_leaves_size, &ph.leaves[0], &err);
+	queue->writeBuffer(d_leaves, ph.leaves, &err);
 	checkErr(err, "failed to write d_leaves");
 
-	int d_tris_size = ph.tris.size() * sizeof(PHTriangle);
-	d_tris = context->createBuffer(CL_MEM_READ_WRITE, d_tris_size, NULL, &err);
+	d_tris = context->createBuffer(ph.tris, &err);
 	checkErr(err || !d_tris, "failed to create leaf buffer");
-	queue->writeBuffer(d_tris, 0, d_tris_size, &ph.tris[0], &err);
+	queue->writeBuffer(d_tris, ph.tris, &err);
 	checkErr(err, "failed to write d_tris");
 
 	char * kernel_src = CL_SRC(
@@ -1635,8 +1628,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			 __global PHRay *rays,
 			 int nr_rays,
 			 __global int *inter_tris,
-		     __global float *dbg_nr,
-			 __global float *dbg_d2
+		     __global float *dbg
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;
@@ -1650,7 +1642,14 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 				PHLeaf l = leaves[i];
 				float nr = _dot(l.n, ray.r);
 				if(i == 121) {
-					dbg_nr[get_global_id(0)] = nr;
+					int idx = get_global_id(0);
+					dbg[8*idx] = nr;
+					dbg[8*idx+1] = l.n[0];
+					dbg[8*idx+2] = l.n[1];
+					dbg[8*idx+3] = l.n[2];
+					dbg[8*idx+4] = ray.r[0];
+					dbg[8*idx+5] = ray.r[1];
+					dbg[8*idx+6] = ray.r[2];
 				}
 				if(nr >= 0) {
 					continue;
@@ -1668,7 +1667,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 				float d2 = normSqr(mq);
 				float r2 = leaf_radius * leaf_radius;
 				if(i == 121) {
-					dbg_d2[get_global_id(0)] = d2;
+					//dbg_d2[get_global_id(0)] = d2;
 				}
 				if(d2 < r2) {
 					PHTriangle tri = tris[l.tri_idx];

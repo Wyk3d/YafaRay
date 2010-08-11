@@ -19,32 +19,39 @@ public:
 	friend class CLVectorBuffer;
 };
 
+class CLKernel;
+
 template<class T>
 class CLVectorBuffer : public std::vector<T>
 {
-	protected:
-		CLBuffer *buffer;
-		friend class CLCommandQueue;
 	public:
+		CLBuffer *buffer;
+
 		CLVectorBuffer() : std::vector<T>(), buffer(NULL) {}
 
 		CLVectorBuffer(size_type _Count) : std::vector<T>(_Count), buffer(NULL) {}
 
-		CLBuffer *getBuffer() const { return buffer; }
-
-		void initBuffer(cl_context context, CLError *error) {
+		static void initBuffer(cl_context context, std::vector<T> &vec, CLBuffer *&buffer, CLError *error) {
 			CLErrGuard err(error);
 
-			if(buffer && size() * sizeof(T) != buffer->getSize()) {
+			if(buffer && vec.size() * sizeof(T) != buffer->getSize()) {
 				buffer->free(&err);
 				if(err) return;
 				buffer = NULL;
 			}
 
 			if(!buffer) {
-				cl_mem mem = clCreateBuffer(context, CL_MEM_READ_WRITE, size() * sizeof(T), NULL, &err.getCode());
+				cl_mem mem = clCreateBuffer(context, CL_MEM_READ_WRITE, vec.size() * sizeof(T), NULL, &err.getCode());
 				if(err) return;
 				buffer = new CLBuffer(mem);
+			}
+		}
+
+		~CLVectorBuffer() {
+			if(buffer) {
+				CLError err;
+				buffer->free(&err);
+				assert(!err);
 			}
 		}
 };

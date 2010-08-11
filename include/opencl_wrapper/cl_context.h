@@ -60,6 +60,11 @@ public:
 		return err ? NULL : new CLBuffer(mem);
 	}
 
+	template<class T>
+	CLBuffer *createBuffer(std::vector<T> &vec, CLError *error) {
+		return createBuffer(CL_MEM_READ_WRITE, vec.size() * sizeof(T), NULL, error);
+	}
+
 	CLProgram *createProgram(const char *source, CLError *error) {
 		CLErrGuard err(error);
 

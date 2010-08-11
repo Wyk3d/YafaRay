@@ -71,15 +71,17 @@ class CLKernel :
 		class SetArgHelper< CLVectorBuffer<T> >
 		{
 			public:
-				bool set(cl_kernel id, cl_uint idx, CLVectorBuffer<T> const& vec, CLError *error) {
+				bool set(cl_kernel id, cl_uint idx, CLVectorBuffer<T> const& c_vec, CLError *error) {
 					CLErrGuard err(error);
+
+					CLVectorBuffer<T> &vec = *((CLVectorBuffer<T>*)&c_vec);
 					
 					cl_context context;
 					clGetKernelInfo(id, CL_KERNEL_CONTEXT, sizeof(cl_context), &context, NULL);
-					((CLVectorBuffer<T>*)&vec)->initBuffer(context, &err);
+					CLVectorBuffer<T>::initBuffer(context, vec, vec.buffer, &err);
 					if(err) return false;
 
-					return err = clSetKernelArg(id, idx, sizeof(cl_mem), &vec.getBuffer()->getId());
+					return err = clSetKernelArg(id, idx, sizeof(cl_mem), &vec.buffer->getId());
 				}
 		};
 
