@@ -1,6 +1,8 @@
 #ifndef _CL_QUEUE_H
 #define _CL_QUEUE_H
 
+#include <yafraycore/ccthreads.h>
+
 typedef CLObjectReleasableInfoBase <
 	cl_command_queue,
 	&clReleaseCommandQueue,
@@ -15,21 +17,29 @@ class CLCommandQueue
 		CLCommandQueue(cl_command_queue id) : CLCommandQueueBase(id) {
 
 		}
+
+		mutable yafthreads::mutex_t mutex;
 	public:
 		friend class CLContext;
 
 		void writeBuffer(const CLBuffer *buffer, size_t offset, size_t size, const void *mem, CLError *error) {
+			yafthreads::guard_t guard(mutex);
+
 			CLErrGuard err(error);
 			clEnqueueWriteBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
 		}
 
 		void readBuffer(const CLBuffer *buffer, size_t offset, size_t size, void *mem, CLError *error) {
+			yafthreads::guard_t guard(mutex);
+
 			CLErrGuard err(error);
 			clEnqueueReadBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
 		}
 
 		template<class Range>
 		void runKernel(const CLKernel *kernel, const Range &r, CLError *error) {
+			yafthreads::guard_t guard(mutex);
+
 			CLErrGuard err(error);
 			cl_event ev;
 			err = clEnqueueNDRangeKernel(

@@ -1,4 +1,5 @@
 #include <yafray_config.h>
+#include <core_api/environment.h>
 
 #include <opencl_wrapper/cl_util.h>
 #include <time.h>

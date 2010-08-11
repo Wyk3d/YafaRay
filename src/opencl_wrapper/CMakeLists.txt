@@ -12,6 +12,6 @@ else (UNIX)
 	set (DLLOAD_LIB "")
 endif (UNIX)
 
-target_link_libraries(opencl_wrapper ${OPENCL_LIBRARIES})
+target_link_libraries(opencl_wrapper yafaraycore ${OPENCL_LIBRARIES})
 
 install (TARGETS opencl_wrapper ${YAF_TARGET_TYPE} DESTINATION ${YAF_LIB_DIR})

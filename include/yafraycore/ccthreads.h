@@ -41,6 +41,19 @@ class YAFRAYCORE_EXPORT mutex_t
 #endif
 };
 
+/*!	A guard class based on mutex_t which can be used to ensure the lock is released
+	every possible way a guarded block might be exited.
+*/
+class YAFRAYCORE_EXPORT guard_t
+{
+	private:	
+		mutex_t &mutex;
+	public:	
+		guard_t(mutex_t &m);
+
+		~guard_t();
+};
+
 /*! The try to provide a platform independant read-shared write-exclusive lock,
 	 as a matter of fact it is simply a pthread wrapper now...
 */

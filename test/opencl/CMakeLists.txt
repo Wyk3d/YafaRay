@@ -1,7 +1,7 @@
 include_directories(${YAF_INCLUDE_DIRS} ${OPENCL_INCLUDE_DIR})
 
 add_executable(test_opencl opencl_test.cc)
-target_link_libraries(test_opencl opencl_wrapper)
+target_link_libraries(test_opencl yafaraycore opencl_wrapper)
 install (TARGETS test_opencl RUNTIME DESTINATION ${YAF_BIN_DIR})
 
 add_executable(test_opencl_mandelbrot mandelbrot.cc)
