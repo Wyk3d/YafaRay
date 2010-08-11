@@ -19,6 +19,14 @@ protected:
 	~CLMem() {
 
 	}
+public:
+	cl_mem_object_type getType(CLError *error = NULL) const {
+		return getInfo<cl_mem_object_type>(CL_MEM_TYPE, error);
+	}
+
+	size_t getSize(CLError *error = NULL) const {
+		return getInfo<size_t>(CL_MEM_SIZE, error);
+	}
 };
 
 

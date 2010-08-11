@@ -67,10 +67,63 @@ class CLKernel :
 				}
 		};
 
+		template< class T >
+		class SetArgHelper< CLVectorBuffer<T> >
+		{
+			public:
+				bool set(cl_kernel id, cl_uint idx, CLVectorBuffer<T> const& vec, CLError *error) {
+					CLErrGuard err(error);
+					
+					cl_context context;
+					clGetKernelInfo(id, CL_KERNEL_CONTEXT, sizeof(cl_context), &context, NULL);
+					((CLVectorBuffer<T>*)&vec)->initBuffer(context, &err);
+					if(err) return false;
+
+					return err = clSetKernelArg(id, idx, sizeof(cl_mem), &vec.getBuffer()->getId());
+				}
+		};
+
 		template<typename T>
 		bool setArg(cl_uint idx, const T& arg, CLError *error = NULL) {
 			SetArgHelper<T> helper;
 			return helper.set(id, idx, arg, error);
+		}
+
+		template<typename A0, typename A1, typename A2, typename A3, typename A4, typename A5, typename A6, typename A7, typename A8, typename A9, typename A10, typename A11>
+		bool setArgs(const A0& a0, const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6, const A7& a7, const A8& a8, const A9& a9, const A10& a10, const A11& a11, CLError *error = NULL) {
+			CLErrGuard err(error);
+			if(getNumArgs(&err) != 12) return false;
+			if(setArg(0, a0, &err)) return false;
+			if(setArg(1, a1, &err)) return false;
+			if(setArg(2, a2, &err)) return false;
+			if(setArg(3, a3, &err)) return false;
+			if(setArg(4, a4, &err)) return false;
+			if(setArg(5, a5, &err)) return false;
+			if(setArg(6, a6, &err)) return false;
+			if(setArg(7, a7, &err)) return false;
+			if(setArg(8, a8, &err)) return false;
+			if(setArg(9, a9, &err)) return false;
+			if(setArg(10, a10, &err)) return false;
+			if(setArg(11, a11, &err)) return false;
+			return true;
+		}
+
+		template<typename A0, typename A1, typename A2, typename A3, typename A4, typename A5, typename A6, typename A7, typename A8, typename A9, typename A10>
+		bool setArgs(const A0& a0, const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6, const A7& a7, const A8& a8, const A9& a9, const A10& a10, CLError *error = NULL) {
+			CLErrGuard err(error);
+			if(getNumArgs(&err) != 11) return false;
+			if(setArg(0, a0, &err)) return false;
+			if(setArg(1, a1, &err)) return false;
+			if(setArg(2, a2, &err)) return false;
+			if(setArg(3, a3, &err)) return false;
+			if(setArg(4, a4, &err)) return false;
+			if(setArg(5, a5, &err)) return false;
+			if(setArg(6, a6, &err)) return false;
+			if(setArg(7, a7, &err)) return false;
+			if(setArg(8, a8, &err)) return false;
+			if(setArg(9, a9, &err)) return false;
+			if(setArg(10, a10, &err)) return false;
+			return true;
 		}
 
 		template<typename A0, typename A1, typename A2, typename A3, typename A4, typename A5, typename A6, typename A7, typename A8, typename A9>

@@ -22,22 +22,67 @@ class CLCommandQueue
 	public:
 		friend class CLContext;
 
-		void writeBuffer(const CLBuffer *buffer, size_t offset, size_t size, const void *mem, CLError *error) {
+		cl_context getContext(CLError *error = NULL) {
+			return getInfo<cl_context>(CL_QUEUE_CONTEXT, error);
+		}
+
+		void writeBuffer(const CLBuffer *buffer, size_t offset, size_t size, const void *mem, CLError *error = NULL) {
 			yafthreads::guard_t guard(mutex);
 
 			CLErrGuard err(error);
 			clEnqueueWriteBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
 		}
 
-		void readBuffer(const CLBuffer *buffer, size_t offset, size_t size, void *mem, CLError *error) {
+		void writeBuffer(const CLBuffer *buffer, void *mem, CLError *error = NULL) {
+			CLErrGuard err(error);
+			size_t size = buffer->getSize(&err);
+			if(err) return;
+			writeBuffer(buffer, 0, size, mem, &err);
+		}
+
+		template<class T>
+		void writeBuffer(CLVectorBuffer<T> &vec, CLError *error = NULL)  {
+			CLErrGuard err(error);
+
+			cl_context context = getContext(&err);
+			if(err) return;
+			vec.initBuffer(context, &err);
+			if(err) return;
+
+			writeBuffer(vec.buffer, 0, vec.size() * sizeof(T), &vec[0], &err);
+		}
+
+		void readBuffer(const CLBuffer *buffer, size_t offset, size_t size, void *mem, CLError *error = NULL) {
 			yafthreads::guard_t guard(mutex);
 
 			CLErrGuard err(error);
 			clEnqueueReadBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
 		}
 
+		void readBuffer(const CLBuffer *buffer, void *mem, CLError *error = NULL) {
+			CLErrGuard err(error);
+			size_t size = buffer->getSize(&err);
+			if(err) return;
+			readBuffer(buffer, 0, size, mem, &err);
+		}
+
+		template<class T>
+		void readBuffer(CLVectorBuffer<T> &vec, CLError *error = NULL) {
+			CLErrGuard err(error);
+
+			if(!vec.buffer) return;
+			size_t size = vec.buffer->getSize(&err);
+			if(err) return;
+
+			if(size > vec.size() * sizeof(T)) {
+				vec.resize(size / sizeof(T));
+			}
+
+			readBuffer(vec.buffer, 0, size, &vec[0], &err);
+		}
+
 		template<class Range>
-		void runKernel(const CLKernel *kernel, const Range &r, CLError *error) {
+		void runKernel(const CLKernel *kernel, const Range &r, CLError *error = NULL) {
 			yafthreads::guard_t guard(mutex);
 
 			CLErrGuard err(error);

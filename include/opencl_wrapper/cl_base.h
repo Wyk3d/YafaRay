@@ -28,7 +28,7 @@ class CLInfoTraits
 {
 	public:
 		template<typename T>
-		T getInfo(ObjType id, InfoType info, CLError *error = NULL) {
+		T getInfo(ObjType id, InfoType info, CLError *error = NULL) const {
 			CLErrGuard err(error);
 			T ret = 0;
 
@@ -53,7 +53,7 @@ class CLInfoTraits
 			return ret;
 		}
 
-		std::string getStringInfo(ObjType id, InfoType info, CLError *error) {
+		std::string getStringInfo(ObjType id, InfoType info, CLError *error) const {
 			CLErrGuard err(error);
 
 			// get the size of the info string
@@ -81,7 +81,7 @@ class CLInfoTraits
 		}
 
 		template<typename T>
-		std::list<T> getListInfo(ObjType id, InfoType info, CLError *error) {
+		std::list<T> getListInfo(ObjType id, InfoType info, CLError *error) const {
 			CLErrGuard err(error);
 			std::list<T> ilist;
 
@@ -129,16 +129,16 @@ class CLObjectInfoBase :
 		}
 	public:
 		template<typename T>
-		T getInfo(InfoType info, CLError *error = NULL) {
+		T getInfo(InfoType info, CLError *error = NULL) const {
 			return infoTraits.getInfo<T>(this->id, info, error);
 		}
 
-		std::string getStringInfo(InfoType info, CLError *error) {
+		std::string getStringInfo(InfoType info, CLError *error) const {
 			return infoTraits.getStringInfo(this->id, info, error);
 		}
 
 		template<typename T>
-		std::list<T> getListInfo(InfoType info, CLError *error) {
+		std::list<T> getListInfo(InfoType info, CLError *error) const {
 			return infoTraits.getListInfo<T>(this->id, info, error);
 		}
 };
