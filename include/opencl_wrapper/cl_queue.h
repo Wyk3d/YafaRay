@@ -30,7 +30,7 @@ class CLCommandQueue
 			yafthreads::guard_t guard(mutex);
 
 			CLErrGuard err(error);
-			clEnqueueWriteBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
+			err = clEnqueueWriteBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
 		}
 
 		void writeBuffer(const CLBuffer *buffer, void *mem, CLError *error = NULL) {
@@ -61,7 +61,7 @@ class CLCommandQueue
 			yafthreads::guard_t guard(mutex);
 
 			CLErrGuard err(error);
-			clEnqueueReadBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
+			err = clEnqueueReadBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
 		}
 
 		void readBuffer(const CLBuffer *buffer, void *mem, CLError *error = NULL) {

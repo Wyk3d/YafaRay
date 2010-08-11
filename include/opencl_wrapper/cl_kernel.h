@@ -63,8 +63,26 @@ class CLKernel :
 			public:
 				bool set(cl_kernel id, cl_uint idx, Mem* const& mem, CLError *error) {
 					CLErrGuard err(error);
-					cl_mem mem_id = (mem != NULL ? mem->getId() : NULL);
-					return err = clSetKernelArg(id, idx, sizeof(cl_mem), &mem_id);
+
+					const void * mem_id_ptr;
+					if(mem != NULL) {
+						mem_id_ptr = &mem->getId();
+					} else {
+						static cl_mem null_mem = NULL;
+						// a crude hack to work around a bug in AMD's implementation
+						// which gives an error if NULL is passed
+						// not thread safe, won't work in multiple contexts etc .. ok for now
+						if(null_mem == NULL) {
+							cl_context context;
+							int err = clGetKernelInfo(id, CL_KERNEL_CONTEXT, sizeof(cl_context), &context, NULL);
+							assert(err == CL_SUCCESS);
+							null_mem = clCreateBuffer(context, CL_MEM_READ_WRITE, 1, NULL, &err);
+							assert(err == CL_SUCCESS && null_mem != NULL);
+						}
+						mem_id_ptr = &null_mem;
+					}
+
+					return err = clSetKernelArg(id, idx, sizeof(cl_mem), mem_id_ptr);
 				}
 		};
 
@@ -81,9 +99,24 @@ class CLKernel :
 					clGetKernelInfo(id, CL_KERNEL_CONTEXT, sizeof(cl_context), &context, NULL);
 					CLVectorBuffer<T>::initBuffer(context, vec, vec.buffer, &err);
 					if(err) return false;
+
+					const void *mem_id_ptr;
+					if(vec.buffer != NULL) {
+						mem_id_ptr = &vec.buffer->getId();
+					} else {
+						static cl_mem null_mem = NULL;
+						// a crude hack to work around a bug in AMD's implementation
+						// which gives an error if NULL is passed
+						// not thread safe, won't work in multiple contexts etc .. ok for now
+						if(null_mem == NULL) {
+							int err;
+							null_mem = clCreateBuffer(context, CL_MEM_READ_WRITE, 1, NULL, &err);
+							assert(err == CL_SUCCESS && null_mem != NULL);
+						}
+						mem_id_ptr = &null_mem;
+					}
 					
-					cl_mem mem_id = (vec.buffer != NULL ? vec.buffer->getId() : NULL);
-					return err = clSetKernelArg(id, idx, sizeof(cl_mem), &mem_id);
+					return err = clSetKernelArg(id, idx, sizeof(cl_mem), mem_id_ptr);
 				}
 		};
 

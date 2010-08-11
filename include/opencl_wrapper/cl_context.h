@@ -21,6 +21,7 @@ private:
 	}
 
 	friend class CLPlatform;
+
 public:
 
 	std::list<CLDevice> getDevices(CLError *error) {

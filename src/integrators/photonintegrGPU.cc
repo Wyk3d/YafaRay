@@ -1396,7 +1396,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 
 	CLVectorBuffer<float> dbg;
 
-	static bool use_debug_buffer = false;
+	static int use_debug_buffer = false;
 	if(use_debug_buffer) {
 		dbg.resize(8*rays.size());
 		queue->writeBuffer(dbg, &err);
@@ -1414,7 +1414,8 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 		__global PHRay *rays,
 		int nr_rays,
 		__global int *inter_tris,
-		__global float *dbg
+		__global float *dbg,
+		int do_debug
 	){
 	*/
 	kernel->setArgs(
@@ -1428,6 +1429,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 		(int)rays.size(),
 		d_inter_tris,
 		dbg,
+		use_debug_buffer,
 		&err
 	);
 	checkErr(err, "failed to set kernel args");
@@ -1564,7 +1566,8 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			 __global PHRay *rays,
 			 int nr_rays,
 			 __global int *inter_tris,
-			 __global float *dbg
+			 __global float *dbg,
+			 int do_debug
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;
@@ -1614,7 +1617,8 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			 __global PHRay *rays,
 			 int nr_rays,
 			 __global int *inter_tris,
-		     __global float *dbg
+		     __global float *dbg,
+			 int do_debug
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;
@@ -1667,7 +1671,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 						t_cand = t;
 						cand = l.tri_idx;
 
-						if(dbg != 0 && get_global_id(0) == 290) {
+						if(do_debug && get_global_id(0) == 290) {
 							int idx = get_global_id(0);
 							/*dbg[8*idx] = nr;
 							dbg[8*idx+1] = l.n[0];
@@ -1704,12 +1708,13 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			__global PHRay *rays,
 			int nr_rays,
 			__global int *inter_tris,
-			__global float *dbg
+			__global float *dbg,
+			int do_debug
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;
 
-			if(dbg != 0 && get_global_id(0) == 883) dbg[0] = 555.1234f;
+			if(do_debug && get_global_id(0) == 883) dbg[0] = 555.1234f;
 
 			PHRay ray = rays[get_global_id(0)];
 			float t_cand = FLT_MAX;
@@ -1790,7 +1795,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 								cand_tri = l.tri_idx;
 								dbg[0] = 666.0f;
 
-								if(dbg != 0 && get_global_id(0) == 883) {
+								if(do_debug && get_global_id(0) == 883) {
 									int idx = get_global_id(0);
 									dbg[0] = (float)(poz-nr_int_nodes);
 									dbg[1] = nr;
@@ -1816,7 +1821,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 				{
 					mask >>= 1;
 					if(!mask) {
-						if(dbg != 0 && get_global_id(0) == 883 && cand_tri == 8)
+						if(do_debug && get_global_id(0) == 883 && cand_tri == 8)
 							dbg[1] = 1234.6542f;
 						inter_tris[get_global_id(0)] = cand_tri;
 						return;
