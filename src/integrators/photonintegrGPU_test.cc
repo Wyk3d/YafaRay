@@ -71,28 +71,34 @@ void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &r_state)
 			continue;
 		}
 
-		if(!hit_ref && !hit_test)
-			continue;
-
-		if(!hit_ref && hit_test) {
-			Y_ERROR << "test hit but no ref hit" << yendl; 
-			continue;
-		}
-
 		bool failed = false;
 
-		if(hit_test) {
-			float d = (p_ref - p_test).length();
-			if(d > 1e-5) {
-				Y_ERROR << "d > 1e-5" << yendl;
-				failed = true;
+		if(!hit_ref)
+		{
+			if(!hit_test) {
+				if(tri_idx_test != -1) {
+					Y_ERROR << "ray should not hit but tri_idx " << tri_idx_test << " was returned" << yendl;
+					failed = true;
+				} else
+					continue;
+			} else {
+				Y_ERROR << "test hit but no ref hit" << yendl; 
+				continue;
 			}
-			if(sp_ref.origin != tri_test) {
-				Y_ERROR << "tri test != tri ref" << yendl;
+		} else {
+			if(hit_test) {
+				float d = (p_ref - p_test).length();
+				if(d > 1e-5) {
+					Y_ERROR << "d > 1e-5" << yendl;
+					failed = true;
+				}
+				if(sp_ref.origin != tri_test) {
+					Y_ERROR << "tri test != tri ref" << yendl;
+					failed = true;
+				}
+			} else
 				failed = true;
-			}
-		} else
-			failed = true;
+		}
 
 		if(failed) 
 		{
@@ -566,11 +572,15 @@ void photonIntegratorGPU_t::RayTest::from_tri_idx(int tri_idx)
 		return;
 	}
 
+	tri_idx_test = tri_idx;
+
 	tri_test = prims[tri_idx];
 	unsigned char udat2[PRIM_DAT_SIZE];
 	hit_test = tri_test->intersect(ray, &t_test, udat2);
-	p_test = ray.from + t_test * ray.dir;
 	set_test = true;
+	if(hit_test) {
+		p_test = ray.from + t_test * ray.dir;
+	}
 }
 
 __END_YAFRAY

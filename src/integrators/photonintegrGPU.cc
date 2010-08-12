@@ -1391,7 +1391,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	queue->writeBuffer(d_inter_tris, inter_tris, &err); 
 	checkErr(err, "failed to initialize d_inter_tris");
 
-	CLKernel *kernel = program->createKernel("intersect_rays", &err);
+	CLKernel *kernel = program->createKernel("intersect_rays_test", &err);
 	checkErr(err || !kernel, "failed to create kernel");
 
 	CLVectorBuffer<float> dbg;
@@ -1575,25 +1575,6 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 
 			for(int i = 0; i < nr_tris; ++i)
 			{
-				/*vector3d_t edge1, edge2, tvec, pvec, qvec;
-				PFLOAT det, inv_det, u, v;
-				edge1 = tri.b - tri.a;
-				edge2 = tri.c - tri.a;
-				pvec = ray.dir ^ edge2;
-				det = edge1 * pvec;
-				if ( det == 0.0)
-					break;
-				inv_det = 1.0 / det;
-				tvec = ray.from - tri.a;
-				u = (tvec*pvec) * inv_det;
-				if (u < 0.0 || u > 1.0)
-					break;
-				qvec = tvec^edge1;
-				v = (ray.dir*qvec) * inv_det;
-				if ((v<0.0) || ((u+v)>1.0) )
-					break;
-				t = edge2 * qvec * inv_det;*/
-
 				PHTriangle tri = tris[i];
 				float edge1[3], edge2[3], tvec[3], pvec[3], qvec[3];
 				float det, inv_det, u, v;
@@ -1646,16 +1627,6 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			{
 				PHLeaf l = leaves[i];
 				float nr = _dot(l.n, ray.r);
-				if(i == 121) {
-					int idx = get_global_id(0);
-					dbg[8*idx] = nr;
-					dbg[8*idx+1] = l.n[0];
-					dbg[8*idx+2] = l.n[1];
-					dbg[8*idx+3] = l.n[2];
-					dbg[8*idx+4] = ray.r[0];
-					dbg[8*idx+5] = ray.r[1];
-					dbg[8*idx+6] = ray.r[2];
-				}
 				if(nr >= 0) {
 					continue;
 				}
@@ -1671,9 +1642,6 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 				sub(q, l.m, mq);
 				float d2 = normSqr(mq);
 				float r2 = leaf_radius * leaf_radius;
-				if(i == 121) {
-					//dbg_d2[get_global_id(0)] = d2;
-				}
 				if(d2 < r2) {
 					PHTriangle tri = tris[l.tri_idx];
 					float edge1[3], edge2[3], tvec[3], pvec[3], qvec[3];
@@ -1698,6 +1666,27 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 					if(t < t_cand) {
 						t_cand = t;
 						cand = l.tri_idx;
+
+						if(dbg != 0 && get_global_id(0) == 290) {
+							int idx = get_global_id(0);
+							/*dbg[8*idx] = nr;
+							dbg[8*idx+1] = l.n[0];
+							dbg[8*idx+2] = l.n[1];
+							dbg[8*idx+3] = l.n[2];
+							dbg[8*idx+4] = ray.r[0];
+							dbg[8*idx+5] = ray.r[1];
+							dbg[8*idx+6] = ray.r[2];
+							dbg[8*idx+7] = (float)i;*/
+							dbg[0] = (float)i;
+							dbg[1] = nr;
+							dbg[2] = det;
+							dbg[3] = inv_det;
+							dbg[4] = u;
+							dbg[5] = v;
+							dbg[6] = t;
+							dbg[7] = d2;
+							dbg[8] = r2;
+						}
 					}
 				}
 			}
@@ -1715,10 +1704,12 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			__global PHRay *rays,
 			int nr_rays,
 			__global int *inter_tris,
-			__global int *dbg
+			__global float *dbg
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;
+
+			if(dbg != 0 && get_global_id(0) == 883) dbg[0] = 555.1234f;
 
 			PHRay ray = rays[get_global_id(0)];
 			float t_cand = FLT_MAX;
@@ -1797,6 +1788,20 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 							if(t < t_cand) {
 								t_cand = t;
 								cand_tri = l.tri_idx;
+								dbg[0] = 666.0f;
+
+								if(dbg != 0 && get_global_id(0) == 883) {
+									int idx = get_global_id(0);
+									dbg[0] = (float)(poz-nr_int_nodes);
+									dbg[1] = nr;
+									dbg[2] = det;
+									dbg[3] = inv_det;
+									dbg[4] = u;
+									dbg[5] = v;
+									dbg[6] = t;
+									dbg[7] = d2;
+									dbg[8] = r2;
+								}
 							}
 						}
 						break;
@@ -1811,6 +1816,8 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 				{
 					mask >>= 1;
 					if(!mask) {
+						if(dbg != 0 && get_global_id(0) == 883 && cand_tri == 8)
+							dbg[1] = 1234.6542f;
 						inter_tris[get_global_id(0)] = cand_tri;
 						return;
 					}
