@@ -63,7 +63,8 @@ class CLKernel :
 			public:
 				bool set(cl_kernel id, cl_uint idx, Mem* const& mem, CLError *error) {
 					CLErrGuard err(error);
-					return err = clSetKernelArg(id, idx, sizeof(cl_mem), &mem->getId());
+					cl_mem mem_id = (mem != NULL ? mem->getId() : NULL);
+					return err = clSetKernelArg(id, idx, sizeof(cl_mem), &mem_id);
 				}
 		};
 
@@ -80,8 +81,9 @@ class CLKernel :
 					clGetKernelInfo(id, CL_KERNEL_CONTEXT, sizeof(cl_context), &context, NULL);
 					CLVectorBuffer<T>::initBuffer(context, vec, vec.buffer, &err);
 					if(err) return false;
-
-					return err = clSetKernelArg(id, idx, sizeof(cl_mem), &vec.buffer->getId());
+					
+					cl_mem mem_id = (vec.buffer != NULL ? vec.buffer->getId() : NULL);
+					return err = clSetKernelArg(id, idx, sizeof(cl_mem), &mem_id);
 				}
 		};
 

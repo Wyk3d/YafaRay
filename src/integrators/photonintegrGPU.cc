@@ -1391,12 +1391,17 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	queue->writeBuffer(d_inter_tris, inter_tris, &err); 
 	checkErr(err, "failed to initialize d_inter_tris");
 
-	CLKernel *kernel = program->createKernel("intersect_rays_test", &err);
+	CLKernel *kernel = program->createKernel("intersect_rays", &err);
 	checkErr(err || !kernel, "failed to create kernel");
 
-	CLVectorBuffer<float> dbg(8*rays.size());
-	queue->writeBuffer(dbg, &err);
-	checkErr(err, "failed to init dbg");
+	CLVectorBuffer<float> dbg;
+
+	static bool use_debug_buffer = false;
+	if(use_debug_buffer) {
+		dbg.resize(8*rays.size());
+		queue->writeBuffer(dbg, &err);
+		checkErr(err, "failed to init dbg");
+	}
 
 	/*
 	__kernel void intersect_rays(
@@ -1408,7 +1413,8 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 		int nr_tris,
 		__global PHRay *rays,
 		int nr_rays,
-		__global int *inter_tris
+		__global int *inter_tris,
+		__global float *dbg
 	){
 	*/
 	kernel->setArgs(
@@ -1437,12 +1443,10 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	queue->readBuffer(d_inter_tris, inter_tris, &err);
 	checkErr(err, "failed to read inter_tris");
 
-	queue->readBuffer(dbg, &err);
-	checkErr(err, "failed to read dbg_nr");
-	std::vector<PHLeaf> tmp_leaves;
-	tmp_leaves.resize(pHierarchy.leaves.size());
-	queue->readBuffer(d_leaves, &tmp_leaves[0], &err);
-	checkErr(err, "failed to read tmp leaves");
+	if(use_debug_buffer) {
+		queue->readBuffer(dbg, &err);
+		checkErr(err, "failed to read dbg_nr");
+	}
 
 	kernel->free(&err);
 	checkErr(err, "failed to free kernel");
@@ -1451,8 +1455,8 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	d_rays->free(&err);
 	checkErr(err, "failed to free d_rays");
 
-	RayTest test(*this, this->pHierarchy);
-	test.test_rays(state);
+	//RayTest test(*this, this->pHierarchy);
+	//test.test_rays(state);
 
 	raygen_rt.genRays();
 	return true;
@@ -1559,7 +1563,8 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			 int nr_tris,
 			 __global PHRay *rays,
 			 int nr_rays,
-			 __global int *inter_tris
+			 __global int *inter_tris,
+			 __global float *dbg
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;
@@ -1709,7 +1714,8 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			int nr_tris,
 			__global PHRay *rays,
 			int nr_rays,
-			__global int *inter_tris
+			__global int *inter_tris,
+			__global int *dbg
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;

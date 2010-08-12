@@ -40,7 +40,7 @@ class CLVectorBuffer : public std::vector<T>
 				buffer = NULL;
 			}
 
-			if(!buffer) {
+			if(!buffer && !vec.empty()) {
 				cl_mem mem = clCreateBuffer(context, CL_MEM_READ_WRITE, vec.size() * sizeof(T), NULL, &err.getCode());
 				if(err) return;
 				buffer = new CLBuffer(mem);
