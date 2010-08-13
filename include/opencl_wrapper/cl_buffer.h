@@ -29,7 +29,7 @@ class CLVectorBuffer : public std::vector<T>
 
 		CLVectorBuffer() : std::vector<T>(), buffer(NULL) {}
 
-		CLVectorBuffer(size_type _Count) : std::vector<T>(_Count), buffer(NULL) {}
+		CLVectorBuffer(typename std::vector<T>::size_type _Count) : std::vector<T>(_Count), buffer(NULL) {}
 
 		static void initBuffer(cl_context context, std::vector<T> &vec, CLBuffer *&buffer, CLError *error) {
 			CLErrGuard err(error);

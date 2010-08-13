@@ -26,6 +26,7 @@
 #include <limits>
 #include <opencl_wrapper/cl_util.h>
 #include <yafraycore/kdtree.h>
+#include <stdio.h>
 
 __BEGIN_YAFRAY
 

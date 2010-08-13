@@ -1125,10 +1125,21 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	return ite;
 }
 
-void photonIntegratorGPU_t::build_disk_hierarchy(PHierarchy &ph, std::vector<const triangle_t *> &prims, int node_poz, DiskVectorType &v, int s, int e) {
+struct BuildDiskHierarchy_CoordinateComparator
+{
+	int coord;
+	BuildDiskHierarchy_CoordinateComparator(int coord) :
+	coord(coord) {}
+	bool operator()(const photonIntegratorGPU_t::Disk& a, const photonIntegratorGPU_t::Disk &b) {
+		return a.c[coord] < b.c[coord];
+	}
+};
+
+void photonIntegratorGPU_t::build_disk_hierarchy(PHierarchy &ph, std::vector<const triangle_t *> &prims, int node_poz, DiskVectorType &v, int s, int e)
+{
 	if(s >= e - 1) {
 		assert(s == e-1);
-		
+
 		while(1) {
 			int leaf_poz = node_poz - ph.int_nodes.size();
 			if(leaf_poz >= 0) {
@@ -1169,15 +1180,7 @@ void photonIntegratorGPU_t::build_disk_hierarchy(PHierarchy &ph, std::vector<con
 		}
 	}
 
-	struct CoordinateComparator
-	{
-		int coord;
-		CoordinateComparator(int coord) :
-		coord(coord) {}
-		bool operator()(const Disk& a, const Disk &b) {
-			return a.c[coord] < b.c[coord];
-		}
-	} comp(ex);
+	BuildDiskHierarchy_CoordinateComparator comp(ex);
 
 	int m = (s+e)/2;
 
@@ -1231,10 +1234,27 @@ void photonIntegratorGPU_t::build_disk_hierarchy(PHierarchy &ph, std::vector<con
 	n.M = v[m].c[ex];
 }
 
+struct GeneratePoints_PointGenFunc {
+    point3d_t &a;
+    vector3d_t ab, ac;
+
+    GeneratePoints_PointGenFunc(photonIntegratorGPU_t::PHTriangle &t) : a(t.a)
+    {
+        ab = t.b-t.a, ac = t.c-t.a;
+    }
+
+    point3d_t operator()(int) {
+        float u = ourRandom();
+        float v = ourRandom();
+        //printf("(%f,%f,%f)", points[j].p.x, points[j].p.y, points[j].p.z);
+        return a + v * ac + (1-v) * u * ab;
+    }
+};
+
 void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<const triangle_t*> &prims, PHierarchy &ph, scene_t *scene)
 {
 	scene_t::objDataArray_t &meshes = scene->getMeshes();
-	
+
 	int total_prims = 0;
 	for(scene_t::objDataArray_t::iterator itr = meshes.begin(); itr != meshes.end(); ++itr) {
 		total_prims += itr->second.obj->numPrimitives();
@@ -1310,22 +1330,7 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<c
 		t->getVertices(pht.a, pht.b, pht.c);
 
 		BestCandidateSampler sampler;
-		struct PointGenFunc {
-			point3d_t &a;
-			vector3d_t ab, ac;
-
-			PointGenFunc(PHTriangle &t) : a(t.a)
-			{
-				ab = t.b-t.a, ac = t.c-t.a;
-			}
-
-			point3d_t operator()(int) {
-				float u = ourRandom();
-				float v = ourRandom();
-				//printf("(%f,%f,%f)", points[j].p.x, points[j].p.y, points[j].p.z);
-				return a + v * ac + (1-v) * u * ab;
-			}
-		} gen_func(pht);
+		GeneratePoints_PointGenFunc gen_func(pht);
 
 		sampler.gen_candidates(gen_func, cur_nr);
 		sampler.gen_samples();
