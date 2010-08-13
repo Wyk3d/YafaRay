@@ -961,28 +961,28 @@ colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) 
 {
 	if(ray.idx >= 0) {
 		const diffRay_t &orig_ray = state.c_rays[ray.idx];
-		float from_diff = (ray.from - orig_ray.from).length();
-		float xfrom_diff = (ray.xfrom - orig_ray.xfrom).length();
-		float yfrom_diff = (ray.yfrom - orig_ray.yfrom).length();
-
-		float dir_diff = 1.0 - (ray.dir * orig_ray.dir) / ray.dir.length() / orig_ray.dir.length();
-		float xdir_diff = 1.0 - (ray.xdir * orig_ray.xdir) / ray.xdir.length() / orig_ray.xdir.length();
-		float ydir_diff = 1.0 - (ray.ydir * orig_ray.ydir) / ray.ydir.length() / orig_ray.ydir.length();
-
-		bool hasDif_diff = ray.hasDifferentials != orig_ray.hasDifferentials;
-
-		float tmin_diff = fabs(ray.tmin - orig_ray.tmin);
-		float tmax_diff = fabs(ray.tmax - orig_ray.tmax);
-		float time_diff = fabs(ray.time - orig_ray.time);
-		if(from_diff > 1e-5 || yfrom_diff > 1e-5 || xfrom_diff > 1e-5 ||
-			dir_diff > 1e-5 || xdir_diff > 1e-5 || ydir_diff > 1e-5 || 
-			hasDif_diff ||
-			time_diff > 1e-5 || tmin_diff > 1e-5) {
+		if(ray.from.x != orig_ray.from.x ||
+			ray.from.y != orig_ray.from.y ||
+			ray.from.z != orig_ray.from.z ||
+			ray.xfrom.x != orig_ray.xfrom.x ||
+			ray.xfrom.y != orig_ray.xfrom.y ||
+			ray.xfrom.z != orig_ray.xfrom.z ||
+			ray.yfrom.x != orig_ray.yfrom.x ||
+			ray.yfrom.y != orig_ray.yfrom.y ||
+			ray.yfrom.z != orig_ray.yfrom.z ||
+			ray.dir.x != orig_ray.dir.x ||
+			ray.dir.y != orig_ray.dir.y ||
+			ray.dir.z != orig_ray.dir.z ||
+			ray.xdir.x != orig_ray.xdir.x ||
+			ray.xdir.y != orig_ray.xdir.y ||
+			ray.xdir.z != orig_ray.xdir.z ||
+			ray.ydir.x != orig_ray.ydir.x ||
+			ray.ydir.y != orig_ray.ydir.y ||
+			ray.ydir.z != orig_ray.ydir.z ||
+			ray.time != orig_ray.time ||
+			ray.hasDifferentials != orig_ray.hasDifferentials)
+		{
 			Y_ERROR << "different ray parameters" << yendl;
-		}
-
-		if(tmax_diff > 1e-5) {
-			//Y_ERROR << "different tmax" << yendl;
 		}
 	}
 
@@ -993,7 +993,7 @@ colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) 
 	CFLOAT alpha=0.0;
 
 	surfacePoint_t sp;
-	
+
 	void *o_udat = state.userdata;
 	bool oldIncludeLights = state.includeLights;
 
