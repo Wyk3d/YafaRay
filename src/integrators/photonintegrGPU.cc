@@ -1353,19 +1353,27 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	class RayStorer : public tiledIntegrator_t::PrimaryRayGenerator {
 		protected:
 			std::vector<diffRay_t> &c_rays;
+			bool adaptive;
 		public:
 			RayStorer(
 				renderArea_t &a, int n_samples, int offset, 
 				tiledIntegrator_t *integrator, random_t &prng,
-				std::vector<diffRay_t> &c_rays
+				std::vector<diffRay_t> &c_rays, bool adaptive
 			) : PrimaryRayGenerator(a, n_samples, offset, integrator, prng),
-				c_rays(c_rays)
+				c_rays(c_rays), adaptive(adaptive)
 			{
 
 			}
 			void rays(diffRay_t &c_ray, int i, int j, int dx, int dy, float wt)
 			{
 				c_rays.push_back(c_ray);
+			}
+			bool skipPixel(int i, int j) {
+				if(adaptive)
+				{
+					return !((photonIntegratorGPU_t*)integrator)->imageFilm->doMoreSamples(j, i);
+				}
+				return false;
 			}
 	};
 
@@ -1377,7 +1385,7 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	std::vector<int> &inter_tris = state.inter_tris;
 
 	random_t prng_rs(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-	RayStorer raygen_rs(a, n_samples, offset, this, prng_rs, c_rays);
+	RayStorer raygen_rs(a, n_samples, offset, this, prng_rs, c_rays, adaptive);
 	
 	raygen_rs.genRays();
 
