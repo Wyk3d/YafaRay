@@ -49,6 +49,13 @@ photonIntegratorGPU_t::photonIntegratorGPU_t(unsigned int dPhotons, unsigned int
 	queue = context->createCommandQueue(device, &err);
 	checkErr(err || queue == NULL, "failed to create command queue");
 
+	cl_uint vendor_id = device.getVendorId(&err);
+	checkErr(err, "failed to get device vendor");
+
+	if(vendor_id == CL_VENDOR_NVIDIA) {
+		cl_build_options += " -cl-nv-verbose";
+	}
+
 	d_int_nodes = NULL;
 	d_leaves = NULL;
 	d_tris = NULL;
@@ -1845,7 +1852,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 		}
 	);
 
-	program = buildCLProgram(kernel_src, context, device);
+	program = buildCLProgram(kernel_src, context, device, cl_build_options.c_str());
 	checkErr(err || !program, "failed to build program");
 
 	{

@@ -198,6 +198,8 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		CLContext *context;
 		CLCommandQueue *queue;
 
+		std::string cl_build_options;
+
 		CLBuffer *d_int_nodes, *d_leaves, *d_tris;
 		CLProgram *program;
 };

@@ -1,7 +1,7 @@
 #include <core_api/environment.h>
 #include <opencl_wrapper/cl_util.h>
 
-CLProgram * buildCLProgram(const char *kernel_source, CLContext *context, CLDevice device) {
+CLProgram * buildCLProgram(const char *kernel_source, CLContext *context, CLDevice device, const char *options) {
 	CLError err;
 	CLProgram *program = context->createProgram(kernel_source, &err);
 	checkErr(err || program == NULL, "failed to create program");
@@ -10,7 +10,7 @@ CLProgram * buildCLProgram(const char *kernel_source, CLContext *context, CLDevi
 	CLError build_error;
 
 	clock_t start = clock();
-	program->build(&build_error);
+	program->build(&build_error, options);
 	clock_t end = clock();
 	std::cout << "[" << (float)(end-start)/(float)CLOCKS_PER_SEC << "s]: ";
 

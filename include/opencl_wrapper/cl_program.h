@@ -22,9 +22,8 @@ protected:
 public:
 	friend class CLContext;
 
-	void build(CLError *error) {
+	void build(CLError *error, const char *options = NULL) {
 		CLErrGuard err(error);
-		char *options = NULL;
 		err = clBuildProgram(id, 0, NULL, options, NULL, NULL);
 	}
 

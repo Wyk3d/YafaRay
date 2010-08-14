@@ -17,6 +17,6 @@ checkErr(CLCombinedError err, const char * message = "", bool fatal = true)
 	}
 }
 
-CLProgram * buildCLProgram(const char *kernel_source, CLContext *context, CLDevice device);
+CLProgram * buildCLProgram(const char *kernel_source, CLContext *context, CLDevice device, const char *options = NULL);
 
 #endif //_CL_UTIL_H_

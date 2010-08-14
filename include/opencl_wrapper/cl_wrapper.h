@@ -26,6 +26,8 @@
 #include "cl_platform.h"
 #include "cl_main.h"
 
+#define CL_VENDOR_NVIDIA 4318
+
 
 
 #endif //_CL_WRAPPER_H
