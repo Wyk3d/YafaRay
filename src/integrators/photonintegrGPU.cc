@@ -786,6 +786,27 @@ bool photonIntegratorGPU_t::preprocess()
 	return true;
 }
 
+
+struct fgState
+{
+	color_t throughput;
+	bool do_bounce;
+	PFLOAT length;
+	surfacePoint_t hit;
+	ray_t pRay;
+	bool close;
+	bool caustic;
+	color_t lcol;
+	BSDF_t sampledFlags;
+
+	fgState()
+		: throughput(1.0), do_bounce(true), length(0), caustic(false)
+	{
+		pRay.tmax = -1;
+	}
+};
+
+
 // final gathering: this is basically a full path tracer only that it uses the radiance map only
 // at the path end. I.e. paths longer than 1 are only generated to overcome lack of local radiance detail.
 // precondition: initBSDF of current spot has been called!
@@ -797,8 +818,240 @@ color_t photonIntegratorGPU_t::finalGathering(renderState_t &state, const surfac
 	void *n_udat = (void *)( &userdata[7] - ( ((size_t)&userdata[7])&7 ) ); // pad userdata to 8 bytes
 	const volumeHandler_t *vol;
 	color_t vcol(0.f);
-	
+
 	int nSampl = std::max(1, nPaths/state.rayDivision);
+
+	std::vector<fgState> sampleStates(nSampl);
+	std::vector<PHRay> rays(nSampl);
+	std::vector<int> inter_tris(nSampl);
+	int ray_idx = 0;
+
+	unsigned int offs_base = nPaths * state.pixelSample + state.samplingOffs;
+
+	for(int i=0; i<nSampl; ++i)
+	{
+		fgState &fgs = sampleStates[i];
+		PHRay &phRay = rays[ray_idx];
+
+		unsigned int offs = offs_base + i; // some redundancy here...
+		color_t scol;
+		// "zero'th" FG bounce:
+		float s1 = RI_vdC(offs_base + i);
+		float s2 = scrHalton(2, offs_base + i);
+		if(state.rayDivision > 1)
+		{
+			s1 = addMod1(s1, state.dc1);
+			s2 = addMod1(s2, state.dc2);
+		}
+
+		sample_t s(s1, s2, BSDF_DIFFUSE|BSDF_REFLECT|BSDF_TRANSMIT); // glossy/dispersion/specular done via recursive raytracing
+		scol = sp.material->sample(state, sp, wo, phRay.r, s);
+
+		if(s.pdf <= 1.0e-6f) {
+			fgs.do_bounce = false;
+			continue;
+		}
+
+		scol *= (std::fabs(phRay.r*sp.N)/s.pdf);
+		if(scol.isBlack()) {
+			fgs.do_bounce = false;
+			continue;
+		}
+
+		phRay.p = sp.P;
+		fgs.throughput = scol;
+		++ray_idx;
+	}
+
+	// make the request
+	// wait for the result
+	// save the result
+
+	ray_idx = 0;
+	for(int i=0; i<nSampl; ++i)
+	{
+		fgState &fgs = sampleStates[i];
+		if(!fgs.do_bounce)
+			continue;
+
+		PFLOAT t;
+		//if(!did_hit = getSPforTri(inter_tris[ray_idx++], t, fgs.hit))
+
+		fgs.pRay.tmin = MIN_RAYDIST;
+		fgs.pRay.tmax = -1.0;
+		fgs.pRay.from = rays[ray_idx].p;
+		fgs.pRay.dir = rays[ray_idx].r;
+		++ray_idx;
+
+		if(!scene->intersect(fgs.pRay, fgs.hit))
+		{
+			fgs.do_bounce = false;
+			fgs.pRay.tmax = -1;
+			continue;
+		}
+
+		t = fgs.pRay.tmax;
+
+		fgs.length = t;
+		BSDF_t matBSDFs = fgs.hit.material->getFlags();
+		bool has_spec = matBSDFs & BSDF_SPECULAR;
+		fgs.close = fgs.length < gatherDist;
+		fgs.do_bounce = fgs.close || has_spec;
+	}
+
+	state.userdata = n_udat;
+
+	for(int depth=0; depth<gatherBounces; ++depth)
+	{
+		ray_idx = 0;
+		for(int i=0; i<nSampl; ++i)
+		{
+			fgState &fgs = sampleStates[i];
+			if(!fgs.do_bounce)
+				continue;
+
+			int d4 = 4*depth;
+			const material_t *p_mat = fgs.hit.material;
+			BSDF_t matBSDFs = p_mat->getFlags();
+			p_mat->initBSDF(state, fgs.hit, matBSDFs);
+
+			vector3d_t pwo = -fgs.pRay.dir;
+
+			if((matBSDFs & BSDF_VOLUMETRIC) && (vol=p_mat->getVolumeHandler(fgs.hit.N * pwo < 0)))
+			{
+				if(vol->transmittance(state, fgs.pRay, vcol)) fgs.throughput *= vcol;
+			}
+
+			unsigned int offs = offs_base + i; // some redundancy here...
+			if(matBSDFs & (BSDF_DIFFUSE))
+			{
+				if(fgs.close)
+				{
+					fgs.lcol = estimateOneDirect(state, fgs.hit, pwo, lights, d4+5, offs);
+				}
+				else if(fgs.caustic)
+				{
+					vector3d_t sf = FACE_FORWARD(fgs.hit.Ng, fgs.hit.N, pwo);
+					const photon_t *nearest = radianceMap.findNearest(fgs.hit.P, sf, lookupRad);
+					if(nearest) fgs.lcol = nearest->color();
+				}
+
+				if(fgs.close || fgs.caustic)
+				{
+					if(matBSDFs & BSDF_EMIT) fgs.lcol += p_mat->emit(state, fgs.hit, pwo);
+					pathCol += fgs.lcol * fgs.throughput;
+				}
+			}
+
+			float s1 = scrHalton(d4+3, offs);
+			float s2 = scrHalton(d4+4, offs);
+
+			if(state.rayDivision > 1)
+			{
+				s1 = addMod1(s1, state.dc1);
+				s2 = addMod1(s2, state.dc2);
+			}
+
+			PHRay &phRay = rays[ray_idx];
+
+			sample_t sb(s1, s2, (fgs.close) ? BSDF_ALL : BSDF_ALL_SPECULAR | BSDF_FILTER);
+			color_t scol = p_mat->sample(state, fgs.hit, pwo, phRay.r, sb);
+
+			if( sb.pdf <= 1.0e-6f)
+			{
+				fgs.do_bounce = false;
+				fgs.pRay.tmax = -1;
+				continue;
+			}
+
+			fgs.sampledFlags = sb.sampledFlags;
+
+			scol *= (std::fabs(phRay.r * fgs.hit.N)/sb.pdf);
+			fgs.throughput *= scol;
+
+			phRay.p = fgs.hit.P;
+			++ray_idx;
+		}
+
+		// make the request
+		// wait for the result
+		// save the result
+
+		ray_idx = 0;
+		for(int i=0; i<nSampl; ++i)
+		{
+			fgState &fgs = sampleStates[i];
+			if(!fgs.do_bounce)
+				continue;
+
+			PFLOAT t;
+			//if(!getSPforTri(inter_tris[ray_idx++], t, fgs.hit))
+
+			fgs.pRay.tmin = MIN_RAYDIST;
+			fgs.pRay.tmax = -1.0;
+			fgs.pRay.from = rays[ray_idx].p;
+			fgs.pRay.dir = rays[ray_idx].r;
+			++ray_idx;
+
+			if(!scene->intersect(fgs.pRay, fgs.hit)) //hit background
+			{
+				if(fgs.caustic && hasBGLight)
+				{
+					pathCol += fgs.throughput * (*background)(fgs.pRay, state);
+				}
+				fgs.do_bounce = false;
+				fgs.pRay.tmax = -1;
+				continue;
+			}
+
+			t = fgs.pRay.tmax;
+
+			fgs.length += t;
+			fgs.caustic = (fgs.caustic || !depth) && (fgs.sampledFlags & (BSDF_SPECULAR | BSDF_FILTER));
+			fgs.close = fgs.length < gatherDist;
+			fgs.do_bounce = fgs.caustic || fgs.close;
+		}
+	}
+
+	for(int i=0; i<nSampl; ++i)
+	{
+		fgState &fgs = sampleStates[i];
+
+		if(fgs.pRay.tmax != -1)
+		{
+			const material_t *p_mat = fgs.hit.material;
+			BSDF_t matBSDFs = p_mat->getFlags();
+			p_mat->initBSDF(state, fgs.hit, matBSDFs);
+			if(matBSDFs & (BSDF_DIFFUSE | BSDF_GLOSSY))
+			{
+				vector3d_t sf = FACE_FORWARD(fgs.hit.Ng, fgs.hit.N, -fgs.pRay.dir);
+				const photon_t *nearest = radianceMap.findNearest(fgs.hit.P, sf, lookupRad);
+				if(nearest) fgs.lcol = nearest->color();
+				if(matBSDFs & BSDF_EMIT) fgs.lcol += p_mat->emit(state, fgs.hit, -fgs.pRay.dir);
+				pathCol += fgs.lcol * fgs.throughput;
+			}
+		}
+	}
+
+	state.userdata = first_udat;
+
+	return pathCol / (float)nSampl;
+}
+
+// final gathering: this is basically a full path tracer only that it uses the radiance map only
+// at the path end. I.e. paths longer than 1 are only generated to overcome lack of local radiance detail.
+// precondition: initBSDF of current spot has been called!
+color_t photonIntegratorGPU_t::finalGathering_orig(renderState_t &state, const surfacePoint_t &sp, const vector3d_t &wo) const
+{
+	color_t pathCol(0.0);
+	void *first_udat = state.userdata;
+	unsigned char userdata[USER_DATA_SIZE+7];
+	void *n_udat = (void *)( &userdata[7] - ( ((size_t)&userdata[7])&7 ) ); // pad userdata to 8 bytes
+	const volumeHandler_t *vol;
+	color_t vcol(0.f);
+
+	int nSampl = std::max(1, nPaths/state.rayDivision);
+
 	for(int i=0; i<nSampl; ++i)
 	{
 		color_t throughput( 1.0 );
@@ -1037,7 +1290,16 @@ colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) 
 				
 				if(bsdfs & BSDF_DIFFUSE) col += estimateDirect_PH(state, sp, lights, scene, wo, trShad, sDepth);
 				
-				if(bsdfs & BSDF_DIFFUSE) col += finalGathering(state, sp, wo);
+				if(bsdfs & BSDF_DIFFUSE) {
+					color_t c = finalGathering(state, sp, wo);
+
+					/*color_t c_orig = finalGathering_orig(state, sp, wo);
+					if(maxAbsDiff(c,c_orig) > 1e-5) {
+						Y_ERROR << "finalgather computed incorrectly" << yendl;
+					}*/
+
+					col += c;
+				}
 			}
 		}
 		else

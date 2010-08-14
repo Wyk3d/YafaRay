@@ -104,6 +104,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 
 	protected:
 		color_t finalGathering(renderState_t &state, const surfacePoint_t &sp, const vector3d_t &wo) const;
+		color_t finalGathering_orig(renderState_t &state, const surfacePoint_t &sp, const vector3d_t &wo) const;
 		color_t estimateOneDirect(renderState_t &state, const surfacePoint_t &sp, vector3d_t wo, const std::vector<light_t *>  &lights, int d1, int n)const;
 
 		CLDevice getOpenCLDevice();
