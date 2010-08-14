@@ -147,7 +147,7 @@ public:
 
 		cands.resize(nr_to_generate);
 
-		Y_INFO << "generating " << nr_to_generate << " candiates" << yendl;
+		//Y_INFO << "generating " << nr_to_generate << " candiates" << yendl;
 
 		for(int j = 0; j < nr_to_generate; j++)
 		{
@@ -168,7 +168,7 @@ public:
 			// generate the difference
 		}
 
-		Y_INFO << "generating " << nr_to_keep << " samples of " << nr_to_generate << yendl;
+		//Y_INFO << "generating " << nr_to_keep << " samples of " << nr_to_generate << yendl;
 
 
 		int ppoz = 0;

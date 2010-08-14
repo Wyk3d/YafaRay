@@ -275,6 +275,10 @@ inline color_t photonIntegratorGPU_t::estimateOneDirect(renderState_t &state, co
 
 bool photonIntegratorGPU_t::preprocess()
 {
+	init_hieararchy();
+	if(ph_show_cover)
+		return true;
+
 	std::stringstream set;
 	gTimer.addEvent("prepass");
 	gTimer.start("prepass");
@@ -357,21 +361,6 @@ bool photonIntegratorGPU_t::preprocess()
 	int pbStep;
 	if(intpb) pb = intpb;
 	else pb = new ConsoleProgressBar_t(80);
-
-	pHierarchy.leaf_radius = 0.5;
-	disks.clear();
-	generate_points(disks, prims, pHierarchy, scene);
-	int node_size = std::max(sizeof(PHInternalNode), sizeof(PHLeaf));
-	// should be max leaves = 2^h > nr disks ..
-	int h = (int)(ceil(log((double)disks.size()) / log(2.0)));
-	int nr_leaves = (1<<h);
-	int nr_internal_nodes = nr_leaves; // -1 (from the formula) +1 from position 0 not used
-	
-	pHierarchy.int_nodes.resize(nr_internal_nodes);
-	pHierarchy.leaves.resize(nr_leaves);
-	build_disk_hierarchy(pHierarchy, prims, 1, disks, 0, (int)disks.size());
-
-	upload_hierarchy(pHierarchy);
 
 	Y_INFO << integratorName << ": Building diffuse photon map..." << yendl;
 	
@@ -784,6 +773,24 @@ bool photonIntegratorGPU_t::preprocess()
 	Y_INFO << integratorName << ": Photonmap building time: " << gTimer.getTime("prepass") << yendl;
 
 	return true;
+}
+
+void photonIntegratorGPU_t::init_hieararchy()
+{
+	pHierarchy.leaf_radius = ph_leaf_radius;
+	disks.clear();
+	generate_points(disks, prims, pHierarchy, scene);
+	int node_size = std::max(sizeof(PHInternalNode), sizeof(PHLeaf));
+	// should be max leaves = 2^h > nr disks ..
+	int h = (int)(ceil(log((double)disks.size()) / log(2.0)));
+	int nr_leaves = (1<<h);
+	int nr_internal_nodes = nr_leaves; // -1 (from the formula) +1 from position 0 not used
+
+	pHierarchy.int_nodes.resize(nr_internal_nodes);
+	pHierarchy.leaves.resize(nr_leaves);
+	build_disk_hierarchy(pHierarchy, prims, 1, disks, 0, (int)disks.size());
+
+	upload_hierarchy(pHierarchy);
 }
 
 
@@ -1219,6 +1226,38 @@ bool photonIntegratorGPU_t::getSPforRay(const diffRay_t &ray, renderState_t &rst
 
 colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) const
 {
+	if(ph_show_cover)
+	{
+		color_t col;
+		surfacePoint_t sp, sp_ref;
+
+		ray_t ray_ref = ray;
+		bool hit_ref = scene->intersect(ray_ref, sp_ref);
+		bool hit = getSPforRay(ray,state,sp);
+
+		if(hit_ref)
+		{
+			if(hit && sp.origin == sp_ref.origin && sp.P == sp_ref.P)
+			{
+				color_t surfCol(0.5,0.5,0.5);
+				vector3d_t dir = (sp.P-ray.from).normalize();
+				col = surfCol * std::fabs(sp.N*dir);
+			} else
+				col = color_t(1.0,0.0,0.0);
+		}
+		else
+		{
+			if(hit) {
+				col = color_t(0.0, 0.0, 1.0);
+			} else {
+				col = color_t(0.0, 0.5, 0.0);
+			}
+		}
+
+		return colorA_t(col, 0.0);
+	}
+
+
 	if(ray.idx >= 0) {
 		const diffRay_t &orig_ray = state.c_rays[ray.idx];
 		if(ray.from.x != orig_ray.from.x ||
@@ -1291,14 +1330,20 @@ colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) 
 				if(bsdfs & BSDF_DIFFUSE) col += estimateDirect_PH(state, sp, lights, scene, wo, trShad, sDepth);
 				
 				if(bsdfs & BSDF_DIFFUSE) {
-					color_t c = finalGathering(state, sp, wo);
+					if(fg_OCL) {
+						color_t c = finalGathering(state, sp, wo);
 
-					/*color_t c_orig = finalGathering_orig(state, sp, wo);
-					if(maxAbsDiff(c,c_orig) > 1e-5) {
-						Y_ERROR << "finalgather computed incorrectly" << yendl;
-					}*/
+						if(ph_test_fg)
+						{
+							color_t c_orig = finalGathering_orig(state, sp, wo);
+							if(maxAbsDiff(c,c_orig) > 1e-5) {
+								Y_ERROR << "finalgather computed incorrectly" << yendl;
+							}
+						}
 
-					col += c;
+						col += c;
+					} else
+						col += finalGathering_orig(state, sp, wo);
 				}
 			}
 		}
@@ -1362,6 +1407,12 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	float dsRad=0.1;
 	float cRad=0.01;
 	float gatherDist=0.2;
+	float ph_leaf_radius=0.1;
+	float ph_area_multiplier=3;
+	bool fg_OCL = false;
+	bool ph_show_cover = false;
+	bool ph_test_rays = false;
+	bool ph_test_fg = false;
 	
 	params.getParam("transpShad", transpShad);
 	params.getParam("shadowDepth", shadowDepth);
@@ -1380,6 +1431,12 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	gatherDist = dsRad;
 	params.getParam("fg_min_pathlen", gatherDist);
 	params.getParam("show_map", show_map);
+	params.getParam("ph_eaf_radius", ph_leaf_radius);
+	params.getParam("ph_area_multiplier", ph_area_multiplier);
+	params.getParam("fg_OCL", fg_OCL);
+	params.getParam("ph_show_cover", ph_show_cover);
+	params.getParam("ph_test_rays", ph_test_rays);
+	params.getParam("ph_test_fg", ph_test_fg);
 	
 	photonIntegratorGPU_t* ite = new photonIntegratorGPU_t(numPhotons, numCPhotons, transpShad, shadowDepth, dsRad, cRad);
 	ite->rDepth = raydepth;
@@ -1391,6 +1448,12 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	ite->gatherBounces = fgBounces;
 	ite->showMap = show_map;
 	ite->gatherDist = gatherDist;
+	ite->ph_leaf_radius = ph_leaf_radius;
+	ite->ph_area_multiplier = ph_area_multiplier;
+	ite->fg_OCL = fg_OCL;
+	ite->ph_show_cover = ph_show_cover;
+	ite->ph_test_rays = ph_test_rays;
+	ite->ph_test_fg = ph_test_fg;
 	return ite;
 }
 
@@ -1536,10 +1599,6 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<c
 	nr_to_keep.resize(total_prims);
 	int tri_idx = 0;
 
-	//float area_multiplier = 2 * sqrt(2.0);
-	float area_multiplier = 3.5;
-	//float area_multiplier = 1;
-
 	int total_nr_tmp = 0;
 	int prims_remaining = total_prims;
 
@@ -1569,7 +1628,7 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<c
 			}
 
 			float area = t->surfaceArea();
-			float cur_nr = std::max((int)(area * area_multiplier / (ph.leaf_radius*ph.leaf_radius*M_PI)), 1);
+			float cur_nr = std::max((int)(area * ph_area_multiplier / (ph.leaf_radius*ph.leaf_radius*M_PI)), 1);
 			total_nr_tmp += cur_nr;
 			nr_to_keep[tri_idx] = cur_nr;
 			++tri_idx;
@@ -1651,96 +1710,102 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	
 	raygen_rs.genRays();
 
-	std::vector<PHRay> rays;
-	rays.resize(c_rays.size());
-	for(int i = 0; i < (int)c_rays.size(); ++i)
+	if(c_rays.size() > 0)
 	{
-		rays[i].p = c_rays[i].from;
-		rays[i].r = c_rays[i].dir;
+		std::vector<PHRay> rays;
+		rays.resize(c_rays.size());
+		for(int i = 0; i < (int)c_rays.size(); ++i)
+		{
+			rays[i].p = c_rays[i].from;
+			rays[i].r = c_rays[i].dir;
+		}
+
+		CLError err;
+		CLBuffer *d_rays = context->createBuffer(rays, &err);
+		checkErr(err || !d_rays, "failed to create internal node buffer");
+		queue->writeBuffer(d_rays, rays, &err);
+		checkErr(err, "failed to write d_rays");
+
+		inter_tris.resize(rays.size());
+
+		CLBuffer *d_inter_tris = context->createBuffer(inter_tris, &err);
+		checkErr(err || !d_inter_tris, "failed to create internal node buffer");
+		// initialize
+		queue->writeBuffer(d_inter_tris, inter_tris, &err); 
+		checkErr(err, "failed to initialize d_inter_tris");
+
+		CLKernel *kernel = program->createKernel("intersect_rays", &err);
+		checkErr(err || !kernel, "failed to create kernel");
+
+		CLVectorBuffer<float> dbg;
+
+		static int use_debug_buffer = ph_test_rays;
+		if(use_debug_buffer) {
+			dbg.resize(8*rays.size());
+			queue->writeBuffer(dbg, &err);
+			checkErr(err, "failed to init dbg");
+		}
+
+		/*
+		__kernel void intersect_rays(
+			__global PHInternalNode *int_nodes, 
+			int nr_int_nodes,
+			__global PHLeaf *leaves,
+			float leaf_radius,
+			__global PHTriangle *tris,
+			int nr_tris,
+			__global PHRay *rays,
+			int nr_rays,
+			__global int *inter_tris,
+			__global float *dbg,
+			int do_debug
+		){
+		*/
+		kernel->setArgs(
+			d_int_nodes,
+			(int)pHierarchy.int_nodes.size(),
+			d_leaves,
+			pHierarchy.leaf_radius,
+			d_tris,
+			(int)prims.size(),
+			d_rays,
+			(int)rays.size(),
+			d_inter_tris,
+			dbg,
+			use_debug_buffer,
+			&err
+		);
+		checkErr(err, "failed to set kernel args");
+
+		int local_size = 32;
+		int global_size = rays.size();
+		if(global_size % local_size != 0) 
+			global_size = (global_size / local_size + 1) * (local_size);
+
+		queue->runKernel(kernel, Range1D(global_size, local_size), &err);
+		checkErr(err, "failed to run kernel");
+
+		queue->readBuffer(d_inter_tris, inter_tris, &err);
+		checkErr(err, "failed to read inter_tris");
+
+		if(use_debug_buffer) {
+			queue->readBuffer(dbg, &err);
+			checkErr(err, "failed to read dbg_nr");
+		}
+
+		kernel->free(&err);
+		checkErr(err, "failed to free kernel");
+		d_inter_tris->free(&err);
+		checkErr(err, "failed to free inter_tris");
+		d_rays->free(&err);
+		checkErr(err, "failed to free d_rays");
+
+		if(ph_test_rays)
+		{
+			RayTest test(*this, this->pHierarchy);
+			test.test_rays(state);
+		}
 	}
-
-	CLError err;
-	CLBuffer *d_rays = context->createBuffer(rays, &err);
-	checkErr(err || !d_rays, "failed to create internal node buffer");
-	queue->writeBuffer(d_rays, rays, &err);
-	checkErr(err, "failed to write d_rays");
-
-	inter_tris.resize(rays.size());
-
-	CLBuffer *d_inter_tris = context->createBuffer(inter_tris, &err);
-	checkErr(err || !d_inter_tris, "failed to create internal node buffer");
-	// initialize
-	queue->writeBuffer(d_inter_tris, inter_tris, &err); 
-	checkErr(err, "failed to initialize d_inter_tris");
-
-	CLKernel *kernel = program->createKernel("intersect_rays_test", &err);
-	checkErr(err || !kernel, "failed to create kernel");
-
-	CLVectorBuffer<float> dbg;
-
-	static int use_debug_buffer = false;
-	if(use_debug_buffer) {
-		dbg.resize(8*rays.size());
-		queue->writeBuffer(dbg, &err);
-		checkErr(err, "failed to init dbg");
-	}
-
-	/*
-	__kernel void intersect_rays(
-		__global PHInternalNode *int_nodes, 
-		int nr_int_nodes,
-		__global PHLeaf *leaves,
-		float leaf_radius,
-		__global PHTriangle *tris,
-		int nr_tris,
-		__global PHRay *rays,
-		int nr_rays,
-		__global int *inter_tris,
-		__global float *dbg,
-		int do_debug
-	){
-	*/
-	kernel->setArgs(
-		d_int_nodes,
-		(int)pHierarchy.int_nodes.size(),
-		d_leaves,
-		pHierarchy.leaf_radius,
-		d_tris,
-		(int)prims.size(),
-		d_rays,
-		(int)rays.size(),
-		d_inter_tris,
-		dbg,
-		use_debug_buffer,
-		&err
-	);
-	checkErr(err, "failed to set kernel args");
-
-	int local_size = 32;
-	int global_size = rays.size();
-	if(global_size % local_size != 0) 
-		global_size = (global_size / local_size + 1) * (local_size);
-
-	queue->runKernel(kernel, Range1D(global_size, local_size), &err);
-	checkErr(err, "failed to run kernel");
-
-	queue->readBuffer(d_inter_tris, inter_tris, &err);
-	checkErr(err, "failed to read inter_tris");
-
-	if(use_debug_buffer) {
-		queue->readBuffer(dbg, &err);
-		checkErr(err, "failed to read dbg_nr");
-	}
-
-	kernel->free(&err);
-	checkErr(err, "failed to free kernel");
-	d_inter_tris->free(&err);
-	checkErr(err, "failed to free inter_tris");
-	d_rays->free(&err);
-	checkErr(err, "failed to free d_rays");
-
-	//RayTest test(*this, this->pHierarchy);
-	//test.test_rays(state);
 
 	raygen_rt.genRays();
 	return true;
@@ -2075,19 +2140,21 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 							if(t < t_cand) {
 								t_cand = t;
 								cand_tri = l.tri_idx;
-								dbg[0] = 666.0f;
 
-								if(do_debug && get_global_id(0) == 883) {
-									int idx = get_global_id(0);
-									dbg[0] = (float)(poz-nr_int_nodes);
-									dbg[1] = nr;
-									dbg[2] = det;
-									dbg[3] = inv_det;
-									dbg[4] = u;
-									dbg[5] = v;
-									dbg[6] = t;
-									dbg[7] = d2;
-									dbg[8] = r2;
+								if(do_debug) {
+									if(get_global_id(0) == 883) {
+										int idx = get_global_id(0);
+										dbg[0] = (float)(poz-nr_int_nodes);
+										dbg[1] = nr;
+										dbg[2] = det;
+										dbg[3] = inv_det;
+										dbg[4] = u;
+										dbg[5] = v;
+										dbg[6] = t;
+										dbg[7] = d2;
+										dbg[8] = r2;
+									} else
+										dbg[0] = 666.0f;
 								}
 							}
 						}

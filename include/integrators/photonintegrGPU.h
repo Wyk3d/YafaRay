@@ -110,6 +110,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		CLDevice getOpenCLDevice();
 		CLPlatform getOpenCLPlatform();
 
+		void init_hieararchy();
 		void upload_hierarchy(PHierarchy &ph);
 
 		friend class RayTest;
@@ -188,6 +189,11 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		BSDF_t allBSDFIntersect;
 		friend class prepassWorker_t;
 		bool hasBGLight;
+		
+		float ph_leaf_radius;
+		float ph_area_multiplier;
+		bool fg_OCL;
+		bool ph_show_cover;
 
 		friend class RayStorer;
 		DiskVectorType disks;
