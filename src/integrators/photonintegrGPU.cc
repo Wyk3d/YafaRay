@@ -1242,12 +1242,15 @@ colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) 
 				vector3d_t dir = (sp.P-ray.from).normalize();
 				col = surfCol * std::fabs(sp.N*dir);
 			} else
-				col = color_t(1.0,0.0,0.0);
+				if(hit)
+					col = color_t(1.0,0.0,0.0);
+				else
+					col = color_t(0.0,0.0,1.0);
 		}
 		else
 		{
 			if(hit) {
-				col = color_t(0.0, 0.0, 1.0);
+				col = color_t(1.0, 0.0, 1.0);
 			} else {
 				col = color_t(0.0, 0.5, 0.0);
 			}
