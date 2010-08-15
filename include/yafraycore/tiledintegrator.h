@@ -38,11 +38,11 @@ class YAFRAYCORE_EXPORT tiledIntegrator_t: public surfaceIntegrator_t
                 tiledIntegrator_t *integrator;
 				scene_t *scene;
 				const camera_t* camera;
-				renderState_t rstate;
+				renderState_t &rstate;
 			public:
 				PrimaryRayGenerator(
 					renderArea_t &a, int n_samples, int offset,
-					tiledIntegrator_t *integrator, random_t &prng
+					tiledIntegrator_t *integrator, renderState_t &rstate
 				);
 				virtual bool skipPixel(int i, int j) { return false; }
 				virtual void onCameraRayMissed(int i, int j, int dx, int dy) { }
@@ -61,7 +61,7 @@ class YAFRAYCORE_EXPORT tiledIntegrator_t: public surfaceIntegrator_t
 				RenderTile_PrimaryRayGenerator(
 					renderArea_t &a, int n_samples, int offset,
 					bool adaptive, int threadID,
-					tiledIntegrator_t *integrator, random_t &prng
+					tiledIntegrator_t *integrator, renderState_t &rstate
 				);
 				bool skipPixel(int i, int j);
 				void onCameraRayMissed(int i, int j, int dx, int dy);

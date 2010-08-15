@@ -42,7 +42,7 @@ void photonIntegratorGPU_t::RayTest::init_test(const diffRay_t &diff_ray)
 	cand_tris.clear();
 }
 
-void photonIntegratorGPU_t::RayTest::test_rays(renderState_t &r_state)
+void photonIntegratorGPU_t::RayTest::test_rays(phRenderState_t &r_state)
 {
 	state = &r_state;
 	std::vector<diffRay_t> &c_rays = state->c_rays;
@@ -581,6 +581,63 @@ void photonIntegratorGPU_t::RayTest::from_tri_idx(int tri_idx)
 	set_test = true;
 	if(hit_test) {
 		p_test = ray.from + t_test * ray.dir;
+	}
+}
+
+void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_state)
+{
+	state = &r_state;
+	std::vector<diffRay_t> &c_rays = state->c_rays;
+	int nr_rays = c_rays.size();
+
+	int AAsamples, AApasses, AAinc_samples;
+	CFLOAT AAthreshold;
+	scene->getAAParameters(AAsamples, AApasses, AAinc_samples, AAthreshold);
+
+	int width = scene->getCamera()->resX();
+	int height = scene->getCamera()->resY();
+
+	if(nr_rays != width * height * AAsamples) {
+		return;
+	}
+
+	int max_size = std::max(width, height);
+
+	Y_INFO << "benchmarking image of size " << width << " * " << height << " * " << AAsamples << " samples" << yendl; 
+
+	surfacePoint_t sp;
+	clock_t start, end;
+
+	for(int tile_size = pi.ph_benchmark_min_tile_size; tile_size <= max_size; tile_size *= 2)
+	{
+		Y_INFO << "tile size " << tile_size << ": ";
+		int ts2 = tile_size * tile_size * AAsamples;
+
+		// TODO: reorder state->ph_rays/c_rays for locality
+
+		start = clock();
+		for(int i = 0; i < nr_rays; i+=ts2)
+		{
+			int j = std::min(i+ts2,nr_rays);
+			pi.intersect_rays(*state, state->ph_rays, i, j, state->inter_tris);
+			for(int k = i; k < j; k++) {
+				diffRay_t &pRay = state->c_rays[k];
+				pRay.idx = k;
+				pi.getSPforRay(pRay, *state, sp);
+			}
+		}
+		end = clock();
+		Y_INFO << ((float)(end-start)/CLOCKS_PER_SEC) << "s / ";
+		
+		start = clock();
+		for(int i = 0; i < nr_rays; i+=ts2)
+		{
+			int j = std::min(i+ts2,nr_rays);
+			for(int k = i; k < j; k++)
+				scene->intersect(state->c_rays[k], sp);
+		}
+		end = clock();
+		Y_INFO << ((float)(end-start)/CLOCKS_PER_SEC) << "s" << yendl;
 	}
 }
 

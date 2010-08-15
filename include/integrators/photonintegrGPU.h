@@ -103,6 +103,19 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		bool renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID);
 
 	protected:
+
+		class phRenderState_t : public renderState_t
+		{
+			public:
+				phRenderState_t(random_t *rand) : renderState_t(rand) {}
+
+				CLVectorBuffer<int> inter_tris; //!< indices to intersected triangles
+				CLVectorBuffer<PHRay> ph_rays;	// the rays that are to be intersected on the GPU
+				std::vector<diffRay_t> c_rays; // temp
+
+				CLKernel *intersect_kernel;
+		};
+
 		color_t finalGathering(renderState_t &state, const surfacePoint_t &sp, const vector3d_t &wo) const;
 		color_t finalGathering_orig(renderState_t &state, const surfacePoint_t &sp, const vector3d_t &wo) const;
 		color_t estimateOneDirect(renderState_t &state, const surfacePoint_t &sp, vector3d_t wo, const std::vector<light_t *>  &lights, int d1, int n)const;
@@ -112,6 +125,8 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 
 		void init_hieararchy();
 		void upload_hierarchy(PHierarchy &ph);
+		void intersect_rays(phRenderState_t &state, CLVectorBuffer<PHRay> &ph_rays, int s, int e, CLVectorBuffer<int> &inter_tris);
+
 
 		friend class RayTest;
 
@@ -135,7 +150,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 			std::vector<int> cand_leaves;
 			std::vector<int> cand_tris;
 
-			renderState_t *state;
+			phRenderState_t *state;
 			diffRay_t ray;
 
 			surfacePoint_t sp_ref;
@@ -149,7 +164,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 
 			}
 
-			void test_rays(renderState_t &state);
+			void test_rays(phRenderState_t &state);
 			void init_test(const diffRay_t &ray);
 
 			void test_intersect_sh();
@@ -164,6 +179,8 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 			void from_leaf_idx(int leaf_idx);
 
 			void list_ray_candidates(bool exact = false);
+
+			void benchmark_ray_count(phRenderState_t &state);
 		};
 
 		
@@ -196,6 +213,11 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		bool ph_show_cover;
 		bool ph_test_rays;
 		bool ph_test_fg;
+		int ph_method;
+		int ph_work_group_size;
+		bool ph_benchmark_ray_count;
+		int ph_benchmark_min_tile_size;
+		bool ph_candidate_multi;
 
 		friend class RayStorer;
 		DiskVectorType disks;

@@ -27,8 +27,6 @@ using namespace::yafaray;
 #include <yafraycore/triangle.h>
 #include <yafraycore/meshtypes.h>
 #include <limits>
-#include <yafraycore/best_candidate.h>
-//#include <integrators/photonintegrGPU.h>
 
 class DiskTessellator
 {

@@ -59,6 +59,7 @@ protected:
 	CandVecType cands;
 	int nr_to_generate;
 	int nr_to_keep;
+	int keep_multi;
 
 	friend class SampleIterator;
 
@@ -133,7 +134,7 @@ public:
 			SampleIterator(*this, itr));
 	}
 
-	BestCandidateSampler() : nr_to_generate(-1), nr_to_keep(-1) {
+	BestCandidateSampler(int keep_multi) : nr_to_generate(-1), nr_to_keep(-1), keep_multi(keep_multi) {
 
 	}
 
@@ -141,7 +142,7 @@ public:
 	void gen_candidates(PointGenFunc gen_functor, int nr_to_keep, int nr_to_generate = -1) {
 		this->nr_to_keep = nr_to_keep;
 		if(nr_to_generate < 0) {
-			nr_to_generate = nr_to_keep * 5;
+			nr_to_generate = nr_to_keep * keep_multi;
 		}
 		this->nr_to_generate = nr_to_generate;
 

@@ -329,10 +329,10 @@ bool tiledIntegrator_t::renderPass(int samples, int offset, bool adaptive)
 
 tiledIntegrator_t::PrimaryRayGenerator::PrimaryRayGenerator(
 	renderArea_t &a, int n_samples, int offset, 
-	tiledIntegrator_t *integrator, random_t &prng
+	tiledIntegrator_t *integrator, renderState_t &rstate
 ) : 
 	area(a), n_samples(n_samples), offset(offset), 
-	integrator(integrator), rstate(&prng)
+	integrator(integrator), rstate(rstate)
 {
 	scene = integrator->scene;
 	camera = scene->getCamera();
@@ -418,9 +418,9 @@ void tiledIntegrator_t::PrimaryRayGenerator::genRays()
 tiledIntegrator_t::RenderTile_PrimaryRayGenerator::RenderTile_PrimaryRayGenerator(
 	renderArea_t &a, int n_samples, int offset,
 	bool adaptive, int threadID, 
-	tiledIntegrator_t *integrator, random_t &prng
+	tiledIntegrator_t *integrator,	renderState_t &rstate
 ) :
-	PrimaryRayGenerator(a, n_samples, offset, integrator, prng), 
+	PrimaryRayGenerator(a, n_samples, offset, integrator, rstate), 
 	adaptive(adaptive), threadID(threadID)
 {
 	rstate.threadID = threadID;
@@ -469,7 +469,8 @@ bool tiledIntegrator_t::renderTile(
 	renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID
 ) {	
 	random_t prng(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-	RenderTile_PrimaryRayGenerator raygen(a, n_samples, offset, adaptive, threadID, this, prng);
+	renderState_t rstate(&prng);
+	RenderTile_PrimaryRayGenerator raygen(a, n_samples, offset, adaptive, threadID, this, rstate);
 	raygen.genRays();
 	return true;
 }

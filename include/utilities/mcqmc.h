@@ -145,6 +145,7 @@ class random_t
 	public:
 		random_t(): x(30903), c(0) {}
 		random_t(unsigned int seed): x(30903), c(seed) {}
+		void reset(unsigned int seed) { x = 30903; c = seed; }
 		double operator()()
 		{
 			unsigned int xh = x>>16, xl = x & 65535;

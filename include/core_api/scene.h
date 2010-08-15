@@ -74,10 +74,7 @@ struct YAFRAYCORE_EXPORT renderState_t
 	PFLOAT time; //!< the current (normalized) frame time
 	mutable void *userdata; //!< a fixed amount of memory where materials may keep data to avoid recalculations...really need better memory management :(
 	void *lightdata; //!< reserved; non-dirac lights may do some surface-point dependant initializations in the future to reduce redundancy...
-	random_t *const prng; //!< a pseudorandom number generator
-
-	std::vector<int> inter_tris; //!< indices to intersected triangles
-	std::vector<diffRay_t> c_rays; // temp: the rays that are to be intersected on the GPU
+	random_t *const prng; //!< a pseudorandom number generator 
 	
 	//! set some initial values that are always the same before integrating a primary ray
 	void setDefaults()

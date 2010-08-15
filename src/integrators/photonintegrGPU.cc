@@ -276,7 +276,7 @@ inline color_t photonIntegratorGPU_t::estimateOneDirect(renderState_t &state, co
 bool photonIntegratorGPU_t::preprocess()
 {
 	init_hieararchy();
-	if(ph_show_cover)
+	if(ph_show_cover || ph_benchmark_ray_count)
 		return true;
 
 	std::stringstream set;
@@ -1219,7 +1219,7 @@ bool photonIntegratorGPU_t::getSPforRay(const diffRay_t &ray, renderState_t &rst
 	if(ray.idx < 0)
 		return scene->intersect(ray, sp);
 
-	int tri_idx = rstate.inter_tris[ray.idx];
+	int tri_idx = ((phRenderState_t*)&rstate)->inter_tris[ray.idx];
 	return getSPfromHit(ray, tri_idx, sp);
 }
 
@@ -1261,7 +1261,7 @@ colorA_t photonIntegratorGPU_t::integrate(renderState_t &state, diffRay_t &ray) 
 
 
 	if(ray.idx >= 0) {
-		const diffRay_t &orig_ray = state.c_rays[ray.idx];
+		const diffRay_t &orig_ray = ((phRenderState_t*)&state)->c_rays[ray.idx];
 		if(ray.from.x != orig_ray.from.x ||
 			ray.from.y != orig_ray.from.y ||
 			ray.from.z != orig_ray.from.z ||
@@ -1415,7 +1415,12 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	bool ph_show_cover = false;
 	bool ph_test_rays = false;
 	bool ph_test_fg = false;
-	
+	int ph_method = 0;
+	int ph_work_group_size = 32;
+	bool ph_benchmark_ray_count = false;
+	int ph_benchmark_min_tile_size = 32;
+	int ph_candidate_multi = 15;
+
 	params.getParam("transpShad", transpShad);
 	params.getParam("shadowDepth", shadowDepth);
 	params.getParam("raydepth", raydepth);
@@ -1433,12 +1438,19 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	gatherDist = dsRad;
 	params.getParam("fg_min_pathlen", gatherDist);
 	params.getParam("show_map", show_map);
-	params.getParam("ph_eaf_radius", ph_leaf_radius);
+	params.getParam("ph_leaf_radius", ph_leaf_radius);
 	params.getParam("ph_area_multiplier", ph_area_multiplier);
 	params.getParam("fg_OCL", fg_OCL);
 	params.getParam("ph_show_cover", ph_show_cover);
 	params.getParam("ph_test_rays", ph_test_rays);
 	params.getParam("ph_test_fg", ph_test_fg);
+	params.getParam("ph_method", ph_method);
+	params.getParam("ph_work_group_size", ph_work_group_size);
+	params.getParam("ph_benchmark_ray_count", ph_benchmark_ray_count);
+	params.getParam("ph_benchmark_min_tile_size", ph_benchmark_min_tile_size);
+	params.getParam("ph_candidate_multi", ph_candidate_multi);
+
+	// TODO: override thread count and tile size settings if benchmarking is enabled
 	
 	photonIntegratorGPU_t* ite = new photonIntegratorGPU_t(numPhotons, numCPhotons, transpShad, shadowDepth, dsRad, cRad);
 	ite->rDepth = raydepth;
@@ -1456,6 +1468,12 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	ite->ph_show_cover = ph_show_cover;
 	ite->ph_test_rays = ph_test_rays;
 	ite->ph_test_fg = ph_test_fg;
+	ite->ph_method = ph_method;
+	ite->ph_work_group_size = ph_work_group_size;
+	ite->ph_benchmark_ray_count = ph_benchmark_ray_count;
+	ite->ph_candidate_multi = ph_candidate_multi;
+	ite->ph_benchmark_min_tile_size = ph_benchmark_min_tile_size;
+
 	return ite;
 }
 
@@ -1643,6 +1661,8 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<c
 	int diff = (total_nr - total_nr_tmp);
 	int diff_per_tri = diff / prims_remaining;
 	int diff_mod = diff % prims_remaining;
+
+	BestCandidateSampler sampler(ph_candidate_multi);
 		
 	for(int i = 0; i < total_prims; ++i)
 	{
@@ -1659,14 +1679,13 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<c
 		PHTriangle &pht = ph.tris[i];
 		t->getVertices(pht.a, pht.b, pht.c);
 
-		BestCandidateSampler sampler;
 		GeneratePoints_PointGenFunc gen_func(pht);
 
 		sampler.gen_candidates(gen_func, cur_nr);
 		sampler.gen_samples();
 
 		for(BestCandidateSampler::iterator itr = sampler.begin(); itr != sampler.end(); ++itr) {
-				disks.push_back(Disk((*itr), i));
+			disks.push_back(Disk((*itr), i));
 		}
 	}
 }
@@ -1675,21 +1694,21 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 {
 	class RayStorer : public tiledIntegrator_t::PrimaryRayGenerator {
 		protected:
-			std::vector<diffRay_t> &c_rays;
+			phRenderState_t &state;
 			bool adaptive;
 		public:
 			RayStorer(
-				renderArea_t &a, int n_samples, int offset, 
-				tiledIntegrator_t *integrator, random_t &prng,
-				std::vector<diffRay_t> &c_rays, bool adaptive
-			) : PrimaryRayGenerator(a, n_samples, offset, integrator, prng),
-				c_rays(c_rays), adaptive(adaptive)
+				renderArea_t &a, int n_samples, int offset, bool adaptive,
+				tiledIntegrator_t *integrator, phRenderState_t &state 
+			) : PrimaryRayGenerator(a, n_samples, offset, integrator, state),
+				state(state), adaptive(adaptive)
 			{
 
 			}
 			void rays(diffRay_t &c_ray, int i, int j, int dx, int dy, float wt)
 			{
-				c_rays.push_back(c_ray);
+				state.c_rays.push_back(c_ray);
+				state.ph_rays.push_back(PHRay(c_ray.from, c_ray.dir));
 			}
 			bool skipPixel(int i, int j) {
 				if(adaptive)
@@ -1700,117 +1719,129 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 			}
 	};
 
-	random_t prng_rt(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-	RenderTile_PrimaryRayGenerator raygen_rt(a, n_samples, offset, adaptive, threadID, this, prng_rt);
-
-	renderState_t &state = raygen_rt.getRenderState();
-	std::vector<diffRay_t> &c_rays = state.c_rays;
-	std::vector<int> &inter_tris = state.inter_tris;
-
-	random_t prng_rs(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-	RayStorer raygen_rs(a, n_samples, offset, this, prng_rs, c_rays, adaptive);
+	random_t prng(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
+	phRenderState_t state(&prng);
+	RenderTile_PrimaryRayGenerator raygen_rt(a, n_samples, offset, adaptive, threadID, this, state);
 	
+	std::vector<diffRay_t> &c_rays = state.c_rays;
+	CLVectorBuffer<PHRay> &ph_rays = state.ph_rays;
+	CLVectorBuffer<int> &inter_tris = state.inter_tris;
+	
+	size_t size_guess = a.W * a.H * n_samples;
+	c_rays.reserve(size_guess);
+	ph_rays.reserve(size_guess);
+
+	RayStorer raygen_rs(a, n_samples, offset, adaptive, this, state);
 	raygen_rs.genRays();
 
-	if(c_rays.size() > 0)
-	{
-		std::vector<PHRay> rays;
-		rays.resize(c_rays.size());
-		for(int i = 0; i < (int)c_rays.size(); ++i)
-		{
-			rays[i].p = c_rays[i].from;
-			rays[i].r = c_rays[i].dir;
-		}
-
-		CLError err;
-		CLBuffer *d_rays = context->createBuffer(rays, &err);
-		checkErr(err || !d_rays, "failed to create internal node buffer");
-		queue->writeBuffer(d_rays, rays, &err);
-		checkErr(err, "failed to write d_rays");
-
-		inter_tris.resize(rays.size());
-
-		CLBuffer *d_inter_tris = context->createBuffer(inter_tris, &err);
-		checkErr(err || !d_inter_tris, "failed to create internal node buffer");
-		// initialize
-		queue->writeBuffer(d_inter_tris, inter_tris, &err); 
-		checkErr(err, "failed to initialize d_inter_tris");
-
-		CLKernel *kernel = program->createKernel("intersect_rays", &err);
-		checkErr(err || !kernel, "failed to create kernel");
-
-		CLVectorBuffer<float> dbg;
-
-		static int use_debug_buffer = ph_test_rays;
-		if(use_debug_buffer) {
-			dbg.resize(8*rays.size());
-			queue->writeBuffer(dbg, &err);
-			checkErr(err, "failed to init dbg");
-		}
-
-		/*
-		__kernel void intersect_rays(
-			__global PHInternalNode *int_nodes, 
-			int nr_int_nodes,
-			__global PHLeaf *leaves,
-			float leaf_radius,
-			__global PHTriangle *tris,
-			int nr_tris,
-			__global PHRay *rays,
-			int nr_rays,
-			__global int *inter_tris,
-			__global float *dbg,
-			int do_debug
-		){
-		*/
-		kernel->setArgs(
-			d_int_nodes,
-			(int)pHierarchy.int_nodes.size(),
-			d_leaves,
-			pHierarchy.leaf_radius,
-			d_tris,
-			(int)prims.size(),
-			d_rays,
-			(int)rays.size(),
-			d_inter_tris,
-			dbg,
-			use_debug_buffer,
-			&err
-		);
-		checkErr(err, "failed to set kernel args");
-
-		int local_size = 32;
-		int global_size = rays.size();
-		if(global_size % local_size != 0) 
-			global_size = (global_size / local_size + 1) * (local_size);
-
-		queue->runKernel(kernel, Range1D(global_size, local_size), &err);
-		checkErr(err, "failed to run kernel");
-
-		queue->readBuffer(d_inter_tris, inter_tris, &err);
-		checkErr(err, "failed to read inter_tris");
-
-		if(use_debug_buffer) {
-			queue->readBuffer(dbg, &err);
-			checkErr(err, "failed to read dbg_nr");
-		}
-
-		kernel->free(&err);
-		checkErr(err, "failed to free kernel");
-		d_inter_tris->free(&err);
-		checkErr(err, "failed to free inter_tris");
-		d_rays->free(&err);
-		checkErr(err, "failed to free d_rays");
-
-		if(ph_test_rays)
-		{
-			RayTest test(*this, this->pHierarchy);
-			test.test_rays(state);
-		}
+	const char *kernel_name = "intersect_rays";
+	switch(ph_method) {
+		case 1:
+			kernel_name = "intersect_rays_test";
+			break;
+		case 2:
+			kernel_name = "intersect_rays_test2";
+			break;
 	}
 
-	raygen_rt.genRays();
+	CLError err;
+	state.intersect_kernel = program->createKernel(kernel_name, &err);
+	checkErr(err || !state.intersect_kernel, "failed to create kernel");
+
+	if(ph_benchmark_ray_count) {
+		RayTest test(*this, this->pHierarchy);
+		test.benchmark_ray_count(state);
+	} else {
+		intersect_rays(state, ph_rays, 0, ph_rays.size(), inter_tris);
+
+		prng.reset(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
+		raygen_rt.genRays();
+	}
+
+	state.intersect_kernel->free(&err);
+	checkErr(err, "failed to free kernel");
+
 	return true;
+}
+
+void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBuffer<PHRay> &rays, int s, int e, CLVectorBuffer<int> &inter_tris)
+{
+	int nr_rays = e - s;
+	if(nr_rays == 0)
+		return;
+
+	CLError err;
+	queue->writeBuffer(rays, &err);
+	checkErr(err, "failed to write d_rays");
+
+	inter_tris.resize(rays.size());
+	if(ph_test_rays) {
+		// initialize
+		queue->writeBuffer(inter_tris, &err); 
+		checkErr(err, "failed to initialize d_inter_tris");
+	}
+
+	CLVectorBuffer<float> dbg;
+
+	static int use_debug_buffer = ph_test_rays;
+	if(use_debug_buffer) {
+		dbg.resize(8*rays.size());
+		queue->writeBuffer(dbg, &err);
+		checkErr(err, "failed to init dbg");
+	}
+
+	/*
+	__kernel void intersect_rays(
+		__global PHInternalNode *int_nodes, 
+		int nr_int_nodes,
+		__global PHLeaf *leaves,
+		float leaf_radius,
+		__global PHTriangle *tris,
+		int nr_tris,
+		__global PHRay *rays,
+		int nr_rays,
+		__global int *inter_tris,
+		__global float *dbg,
+		int do_debug
+	){
+	*/
+	state.intersect_kernel->setArgs(
+		d_int_nodes,
+		(int)pHierarchy.int_nodes.size(),
+		d_leaves,
+		pHierarchy.leaf_radius,
+		d_tris,
+		(int)prims.size(),
+		rays,
+		(int)rays.size(),
+		inter_tris,
+		dbg,
+		use_debug_buffer,
+		&err
+	);
+	checkErr(err, "failed to set kernel args");
+
+	int local_size = ph_work_group_size;
+	int global_size = rays.size();
+	if(global_size % local_size != 0) 
+		global_size = (global_size / local_size + 1) * (local_size);
+
+	queue->runKernel(state.intersect_kernel, Range1D(global_size, local_size), &err);
+	checkErr(err, "failed to run kernel");
+
+	queue->readBuffer(inter_tris, &err);
+	checkErr(err, "failed to read inter_tris");
+
+	if(use_debug_buffer) {
+		queue->readBuffer(dbg, &err);
+		checkErr(err, "failed to read dbg_nr");
+	}
+
+	if(ph_test_rays)
+	{
+		RayTest test(*this, this->pHierarchy);
+		test.test_rays(state);
+	}
 }
 
 void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
