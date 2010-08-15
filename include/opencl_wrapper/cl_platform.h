@@ -1,14 +1,16 @@
 #ifndef _CL_PLATFORM_H
 #define _CL_PLATFORM_H
 
+class CLPlatform;
+
 typedef CLObjectInfoBase <
 	cl_platform_id,
 	cl_platform_info,
-	&clGetPlatformInfo
+	CLPlatform
 > CLPlatformBase;
 
-class CLPlatform :
-	public CLPlatformBase
+class CLPlatform 
+	: public CLPlatformBase
 {
 private:
 	CLPlatform(cl_platform_id id) : CLPlatformBase(id) {
@@ -16,6 +18,10 @@ private:
 	}
 
 public:
+	static cl_int InfoFunc(cl_platform_id id, cl_platform_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
+		return clGetPlatformInfo(id, info, param_size, param_value, param_size_ret);
+	}
+
 	std::string getProfile(CLError *error = NULL) {
 		return getStringInfo(CL_PLATFORM_PROFILE, error);
 	}

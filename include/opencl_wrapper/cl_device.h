@@ -1,10 +1,12 @@
 #ifndef _CL_DEVICE_H
 #define _CL_DEVICE_H
 
+class CLDevice;
+
 typedef CLObjectInfoBase <
 	cl_device_id,
 	cl_device_info,
-	&clGetDeviceInfo
+	CLDevice
 > CLDeviceBase;
 
 class CLPlatform;
@@ -17,6 +19,10 @@ private:
 
 	}
 public:
+	static cl_int InfoFunc(cl_device_id id, cl_device_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
+		return clGetDeviceInfo(id, info, param_size, param_value, param_size_ret);
+	}
+
 	friend class CLContext;
 	friend class CLPlatform;
 

@@ -780,7 +780,6 @@ void photonIntegratorGPU_t::init_hieararchy()
 	pHierarchy.leaf_radius = ph_leaf_radius;
 	disks.clear();
 	generate_points(disks, prims, pHierarchy, scene);
-	int node_size = std::max(sizeof(PHInternalNode), sizeof(PHLeaf));
 	// should be max leaves = 2^h > nr disks ..
 	int h = (int)(ceil(log((double)disks.size()) / log(2.0)));
 	int nr_leaves = (1<<h);
@@ -843,8 +842,8 @@ color_t photonIntegratorGPU_t::finalGathering(renderState_t &state, const surfac
 		unsigned int offs = offs_base + i; // some redundancy here...
 		color_t scol;
 		// "zero'th" FG bounce:
-		float s1 = RI_vdC(offs_base + i);
-		float s2 = scrHalton(2, offs_base + i);
+		float s1 = RI_vdC(offs);
+		float s2 = scrHalton(2, offs);
 		if(state.rayDivision > 1)
 		{
 			s1 = addMod1(s1, state.dc1);
@@ -1475,7 +1474,7 @@ void photonIntegratorGPU_t::build_disk_hierarchy(PHierarchy &ph, std::vector<con
 		while(1) {
 			int leaf_poz = node_poz - ph.int_nodes.size();
 			if(leaf_poz >= 0) {
-				assert(leaf_poz < ph.leaves.size());
+				assert(leaf_poz < (int)ph.leaves.size());
 				ph.leaves[leaf_poz] = PHLeaf(v[s].c, prims[v[s].tri_idx]->getNormal(), v[s].tri_idx);
 				//leaves[leaf_poz] = PHLeaf(v[s].c, v[s].t->getNormal(), v[s].t);
 				//leaf_tris[leaf_poz] = v[s].t;
@@ -1829,7 +1828,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 	queue->writeBuffer(d_tris, ph.tris, &err);
 	checkErr(err, "failed to write d_tris");
 
-	char * kernel_src = CL_SRC(
+	const char * kernel_src = CL_SRC(
 		typedef struct
 		{
 			float m[3];	// disk center

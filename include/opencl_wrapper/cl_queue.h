@@ -3,11 +3,12 @@
 
 #include <yafraycore/ccthreads.h>
 
+class CLCommandQueue;
+
 typedef CLObjectReleasableInfoBase <
 	cl_command_queue,
-	&clReleaseCommandQueue,
 	cl_command_queue_info,
-	&clGetCommandQueueInfo
+	CLCommandQueue
 > CLCommandQueueBase;
 
 class CLCommandQueue
@@ -20,6 +21,14 @@ class CLCommandQueue
 
 		mutable yafthreads::mutex_t mutex;
 	public:
+		static cl_int InfoFunc(cl_command_queue id, cl_command_queue_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
+			return clGetCommandQueueInfo(id, info, param_size, param_value, param_size_ret);
+		}
+
+		static cl_int ReleaseFunc(cl_command_queue id) {
+			return clReleaseCommandQueue(id);
+		}
+
 		friend class CLContext;
 
 		cl_context getContext(CLError *error = NULL) {

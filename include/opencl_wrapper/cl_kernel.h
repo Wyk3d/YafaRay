@@ -1,11 +1,12 @@
 #ifndef _CL_KERNEL_H
 #define _CL_KERNEL_H
 
+class CLKernel;
+
 typedef CLObjectReleasableInfoBase< 
 	cl_kernel,
-	&clReleaseKernel,
 	cl_kernel_info,
-	&clGetKernelInfo 
+	CLKernel
 > CLKernelBase;
 
 class CLKernel :
@@ -20,6 +21,13 @@ class CLKernel :
 			
 		}
 	public:
+		static cl_int InfoFunc(cl_kernel id, cl_kernel_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
+			return clGetKernelInfo(id, info, param_size, param_value, param_size_ret);
+		}
+
+		static cl_int ReleaseFunc(cl_kernel id) {
+			return clReleaseKernel(id);
+		}
 		friend class CLProgram;
 
 		std::string getFuncName(CLError *error = NULL) {

@@ -194,6 +194,8 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		float ph_area_multiplier;
 		bool fg_OCL;
 		bool ph_show_cover;
+		bool ph_test_rays;
+		bool ph_test_fg;
 
 		friend class RayStorer;
 		DiskVectorType disks;

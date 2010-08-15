@@ -26,7 +26,8 @@
 #include "cl_platform.h"
 #include "cl_main.h"
 
-#define CL_VENDOR_NVIDIA 4318
+#define CL_VENDOR_NVIDIA	4318
+#define CL_VENDOR_AMD		4098
 
 
 

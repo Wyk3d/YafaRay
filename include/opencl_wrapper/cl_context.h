@@ -1,11 +1,12 @@
 #ifndef _CL_CONTEXT_H
 #define _CL_CONTEXT_H
 
+class CLContext;
+
 typedef CLObjectReleasableInfoBase <
 	cl_context,
-	&clReleaseContext,
 	cl_context_info,
-	&clGetContextInfo
+	CLContext
 > CLContextBase;
 
 class CLContext :
@@ -23,6 +24,13 @@ private:
 	friend class CLPlatform;
 
 public:
+	static cl_int InfoFunc(cl_context id, cl_context_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
+		return clGetContextInfo(id, info, param_size, param_value, param_size_ret);
+	}
+
+	static cl_int ReleaseFunc(cl_context id) {
+		return clReleaseContext(id);
+	}
 
 	std::list<CLDevice> getDevices(CLError *error) {
 		CLErrGuard err(error);

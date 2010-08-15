@@ -118,11 +118,13 @@ public:
 		case CL_INVALID_GL_OBJECT:
 			return "CL_INVALID_GL_OBJECT";                  
 		case CL_INVALID_BUFFER_SIZE:
-			return "CL_INVALID_BUFFER_SIZE";                 
+			return "CL_INVALID_BUFFER_SIZE";   
 		case CL_INVALID_MIP_LEVEL:
-			return "CL_INVALID_MIP_LEVEL";                   
+			return "CL_INVALID_MIP_LEVEL";
+#ifdef CL_INVALID_GLOBAL_WORK_SIZE
 		case CL_INVALID_GLOBAL_WORK_SIZE:
-			return "CL_INVALID_GLOBAL_WORK_SIZE";            
+			return "CL_INVALID_GLOBAL_WORK_SIZE";
+#endif
 		default:
 			return "unknown error code";
 		}

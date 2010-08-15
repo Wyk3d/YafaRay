@@ -1,11 +1,12 @@
 #ifndef _CL_PROGRAM_H
 #define _CL_PROGRAM_H
 
+class CLProgram;
+
 typedef CLObjectReleasableInfoBase < 
 	cl_program,
-	&clReleaseProgram,
 	cl_program_info,
-	&clGetProgramInfo 
+	CLProgram 
 > CLProgramBase;
 
 class CLProgram :
@@ -20,6 +21,14 @@ protected:
 
 	}
 public:
+	static cl_int InfoFunc(cl_program id, cl_program_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
+		return clGetProgramInfo(id, info, param_size, param_value, param_size_ret);
+	}
+
+	static cl_int ReleaseFunc(cl_program id) {
+		return clReleaseProgram(id);
+	}
+
 	friend class CLContext;
 
 	void build(CLError *error, const char *options = NULL) {

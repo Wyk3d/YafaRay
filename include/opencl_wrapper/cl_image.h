@@ -5,8 +5,6 @@ class CLImage :
 	public CLMem
 {
 	private:
-		CLInfoTraits< cl_mem, cl_image_info, &clGetImageInfo > imageInfo;
-
 		CLImage(cl_mem mem) : CLMem(mem) {
 
 		}

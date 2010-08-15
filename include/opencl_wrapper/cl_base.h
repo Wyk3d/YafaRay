@@ -21,14 +21,16 @@ class CLObjectBase
 
 template <
 	typename ObjType,
-	typename InfoType,
-	CL_API_ENTRY cl_int (CL_API_CALL *InfoFunc)(ObjType, InfoType, size_t, void*, size_t*)
+	typename InfoType
 >
-class CLInfoTraits
+class CLInfo
 {
 	public:
+		typedef cl_int (*InfoFuncType)(ObjType, InfoType, size_t, void*, size_t*);
+
 		template<typename T>
-		T getInfo(ObjType id, InfoType info, CLError *error = NULL) const {
+		static T getInfo(ObjType id, InfoType info,	InfoFuncType InfoFunc, CLError *error = NULL)
+		{
 			CLErrGuard err(error);
 			T ret = 0;
 
@@ -53,7 +55,8 @@ class CLInfoTraits
 			return ret;
 		}
 
-		std::string getStringInfo(ObjType id, InfoType info, CLError *error) const {
+		static std::string getStringInfo(ObjType id, InfoType info,	InfoFuncType InfoFunc, CLError *error = NULL)
+		{
 			CLErrGuard err(error);
 
 			// get the size of the info string
@@ -81,7 +84,8 @@ class CLInfoTraits
 		}
 
 		template<typename T>
-		std::list<T> getListInfo(ObjType id, InfoType info, CLError *error) const {
+		static std::list<T> getListInfo(ObjType id, InfoType info,	InfoFuncType InfoFunc, CLError *error = NULL)
+		{
 			CLErrGuard err(error);
 			std::list<T> ilist;
 
@@ -116,55 +120,54 @@ class CLInfoTraits
 template <
 	typename ObjType,
 	typename InfoType,
-	CL_API_ENTRY cl_int (CL_API_CALL *InfoFunc)(ObjType, InfoType, size_t, void*, size_t*)
+	typename CLObject
 >
 class CLObjectInfoBase :
 	public CLObjectBase< ObjType >
 {
-	private:
-		CLInfoTraits< ObjType, InfoType, InfoFunc> infoTraits;
 	protected:
+		typedef CLInfo< ObjType, InfoType> Info;
+
 		CLObjectInfoBase(ObjType id) : CLObjectBase<ObjType>(id) {
 
 		}
 	public:
 		template<typename T>
 		T getInfo(InfoType info, CLError *error = NULL) const {
-			return infoTraits.getInfo<T>(this->id, info, error);
+			return Info::template getInfo<T>(this->id, info, &CLObject::InfoFunc, error);
 		}
 
 		std::string getStringInfo(InfoType info, CLError *error) const {
-			return infoTraits.getStringInfo(this->id, info, error);
+			return Info::getStringInfo(this->id, info, &CLObject::InfoFunc, error);
 		}
 
 		template<typename T>
 		std::list<T> getListInfo(InfoType info, CLError *error) const {
-			return infoTraits.getListInfo<T>(this->id, info, error);
+			return Info::template getListInfo<T>(this->id, info, &CLObject::InfoFunc, error);
 		}
 };
 
 template <
 	typename ObjType,
-	CL_API_ENTRY cl_int (CL_API_CALL *ReleaseFunc)(ObjType),
 	typename InfoType,
-	CL_API_ENTRY cl_int (CL_API_CALL *InfoFunc)(ObjType, InfoType, size_t, void*, size_t*)
+	typename CLObject
 >
 class CLObjectReleasableInfoBase :
-	public CLObjectInfoBase< ObjType, InfoType, InfoFunc >
+	public CLObjectInfoBase< ObjType, InfoType, CLObject >
 {
 	protected:
 		CLObjectReleasableInfoBase(ObjType id) :
-			 CLObjectInfoBase< ObjType, InfoType, InfoFunc >(id) {
-		}
+			 CLObjectInfoBase< ObjType, InfoType, CLObject >(id) 
+		{ }
 
-		~CLObjectReleasableInfoBase() {
-			assert(this->id == NULL);
-		}
+		 ~CLObjectReleasableInfoBase() {
+			 assert(this->id == NULL);
+		 }
 	public:
 		void free(CLError *error = NULL) {
 			CLErrGuard err(error);
 
-			if(!(err = ReleaseFunc(this->id)) || error == NULL) {
+			if(!(err = CLObject::ReleaseFunc(this->id)) || error == NULL) {
 				this->id = NULL;
 				delete this;
 			}
