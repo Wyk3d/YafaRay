@@ -788,8 +788,10 @@ void photonIntegratorGPU_t::init_hieararchy()
 	pHierarchy.int_nodes.resize(nr_internal_nodes);
 	pHierarchy.leaves.resize(nr_leaves);
 	build_disk_hierarchy(pHierarchy, prims, 1, disks, 0, (int)disks.size());
+	Y_INFO << integratorName << ": build bounding sphere hierarchy." << yendl;
 
 	upload_hierarchy(pHierarchy);
+	Y_INFO << integratorName << ": uploaded scene data to OpenCL." << yendl;
 }
 
 
@@ -1663,7 +1665,15 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<c
 	int diff_mod = diff % prims_remaining;
 
 	BestCandidateSampler sampler(ph_candidate_multi);
-		
+
+	progressBar_t *pb = new ConsoleProgressBar_t(80);
+	pb->init(128);
+	int pbStep = std::max(1, total_nr/128); 
+	pb->setTag("Generating point samples...");
+	int next_step = prims_remaining - pbStep;
+
+	disks.reserve(total_nr);
+
 	for(int i = 0; i < total_prims; ++i)
 	{
 		if(nr_to_keep[i] == 0)
@@ -1686,8 +1696,15 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<c
 
 		for(BestCandidateSampler::iterator itr = sampler.begin(); itr != sampler.end(); ++itr) {
 			disks.push_back(Disk((*itr), i));
+			if(disks.size() % pbStep == 0)
+				pb->update();
 		}
 	}
+
+	pb->done();
+	pb->setTag("Point samples generated.");
+	delete pb;
+	Y_INFO << integratorName << ": generated " << total_nr << " point samples." << yendl;
 }
 
 bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offset, bool adaptive, int threadID)

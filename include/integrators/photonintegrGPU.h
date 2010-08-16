@@ -217,7 +217,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		int ph_work_group_size;
 		bool ph_benchmark_ray_count;
 		int ph_benchmark_min_tile_size;
-		bool ph_candidate_multi;
+		int ph_candidate_multi;
 
 		friend class RayStorer;
 		DiskVectorType disks;

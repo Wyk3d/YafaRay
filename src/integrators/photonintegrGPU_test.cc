@@ -598,22 +598,31 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 	int height = scene->getCamera()->resY();
 
 	if(nr_rays != width * height * AAsamples) {
+		Y_ERROR << "tile_size * AAsamples != width * height * AAsamples" << yendl;
 		return;
 	}
 
 	int max_size = std::max(width, height);
 
-	Y_INFO << "benchmarking image of size " << width << " * " << height << " * " << AAsamples << " samples" << yendl; 
+	Y_INFO << yendl << "benchmarking image of size " << width << " * " << height << " * " << AAsamples << " samples" << yendl; 
 
 	surfacePoint_t sp;
 	clock_t start, end;
 
-	for(int tile_size = pi.ph_benchmark_min_tile_size; tile_size <= max_size; tile_size *= 2)
+	int max_tile_size = 1;
+	while(max_tile_size <= max_size) max_tile_size *= 2;
+
+	//for(int tile_size = pi.ph_benchmark_min_tile_size; tile_size <= max_tile_size; tile_size *= 2) 
+	for(int tile_size = max_tile_size; tile_size >= pi.ph_benchmark_min_tile_size; tile_size /= 2)
 	{
-		Y_INFO << "tile size " << tile_size << ": ";
 		int ts2 = tile_size * tile_size * AAsamples;
 
 		// TODO: reorder state->ph_rays/c_rays for locality
+
+		progressBar_t *pb = new ConsoleProgressBar_t(80);
+		pb->init(128);
+		int pbStep = std::max(1, nr_rays/128); 
+		int nextStep = pbStep;
 
 		start = clock();
 		for(int i = 0; i < nr_rays; i+=ts2)
@@ -625,19 +634,40 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 				pRay.idx = k;
 				pi.getSPforRay(pRay, *state, sp);
 			}
+
+			if(i >= nextStep) {
+				pb->update();
+				nextStep += pbStep;
+			}
 		}
 		end = clock();
-		Y_INFO << ((float)(end-start)/CLOCKS_PER_SEC) << "s / ";
+		pb->done();
+		delete pb;
+		float dt1 = ((float)(end-start)/CLOCKS_PER_SEC);
 		
+		pb = new ConsoleProgressBar_t(80);
+		pb->init(128);
+		nextStep = pbStep;
 		start = clock();
 		for(int i = 0; i < nr_rays; i+=ts2)
 		{
 			int j = std::min(i+ts2,nr_rays);
 			for(int k = i; k < j; k++)
 				scene->intersect(state->c_rays[k], sp);
+
+			if(i >= nextStep) {
+				pb->update();
+				nextStep += pbStep;
+			}
 		}
 		end = clock();
-		Y_INFO << ((float)(end-start)/CLOCKS_PER_SEC) << "s" << yendl;
+		pb->done();
+		delete pb;
+		float dt2 = ((float)(end-start)/CLOCKS_PER_SEC);
+
+		Y_INFO << "tile size " << tile_size << ": ";
+		Y_INFO << dt1 << "s (" << nr_rays / dt1 << " rays/sec) / ";
+		Y_INFO << dt2 << "s (" << nr_rays / dt2 << " rays/sec)" << yendl;
 	}
 }
 
