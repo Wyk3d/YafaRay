@@ -1,6 +1,13 @@
 #ifndef _CL_KERNEL_H
 #define _CL_KERNEL_H
 
+// AMD hack, declared here, initialized by context, used in the kernel setargs
+class NullMemStore
+{
+	public:
+		static cl_mem null_mem;
+};
+
 class CLKernel;
 
 typedef CLObjectReleasableInfoBase< 
@@ -79,7 +86,7 @@ class CLKernel :
 					} else {
 						// a crude hack to work around a bug in AMD's implementation
 						// which gives an error if NULL is passed
-						mem_id_ptr = &CLContext::null_mem;
+						mem_id_ptr = &NullMemStore::null_mem;
 						assert(mem_id_ptr != NULL);
 					}
 
@@ -107,7 +114,7 @@ class CLKernel :
 					} else {
 						// a crude hack to work around a bug in AMD's implementation
 						// which gives an error if NULL is passed
-						mem_id_ptr = &CLContext::null_mem;
+						mem_id_ptr = &NullMemStore::null_mem;
 						assert(mem_id_ptr != NULL);
 					}
 					
@@ -135,7 +142,7 @@ class CLKernel :
 					} else {
 						// a crude hack to work around a bug in AMD's implementation
 						// which gives an error if NULL is passed
-						mem_id_ptr = &CLContext::null_mem;
+						mem_id_ptr = &NullMemStore::null_mem;
 						assert(mem_id_ptr != NULL);
 					}
 					

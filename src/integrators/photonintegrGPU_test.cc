@@ -80,7 +80,7 @@ void photonIntegratorGPU_t::RayTest::test_rays(phRenderState_t &r_state, int s, 
 				} else
 					continue;
 			} else {
-				Y_ERROR << "test hit but no ref hit" << yendl; 
+				Y_ERROR << "test hit but no ref hit" << yendl;
 				continue;
 			}
 		} else {
@@ -98,7 +98,7 @@ void photonIntegratorGPU_t::RayTest::test_rays(phRenderState_t &r_state, int s, 
 				failed = true;
 		}
 
-		if(failed) 
+		if(failed)
 		{
 			static bool on = true;
 			if(on) list_ray_candidates(true);
@@ -191,7 +191,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_sh()
 
 				PHInternalNode &n = int_nodes[poz];
 				// d(line, center) <= radius ?
-				vector3d_t pc = n.c - ray.from;				
+				vector3d_t pc = n.c - ray.from;
 				float d2 = (pc ^ ray.dir).lengthSqr();
 				float r2 = n.r * n.r;
 				if(d2 > r2) {
@@ -213,7 +213,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_sh()
 					// exists t >= pcr >= 0 => found
 				} else
 					nr_inside++;
-				
+
 			} else { // check leaf
 				nr_leaves++;
 
@@ -227,7 +227,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_sh()
 				vector3d_t pm = l.c - ray.from;
 				float t = l.n * pm / nr;
 				point3d_t q = ray.from + ray.dir * t;
-				
+
 				float d2 = (q - l.c).lengthSqr();
 				float r2 = leaf_radius * leaf_radius;
 				if(d2 < r2) {
@@ -307,7 +307,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_kd()
 
 	float t_cand = std::numeric_limits<float>::max();
 
-#define REPORT { if(do_report) if(poz < (int)int_nodes.size()) printf("int %d %f %f\n", poz, tmin, tmax); \
+#define REPORT { if(do_report) if((int)poz < (int)int_nodes.size()) printf("int %d %f %f\n", poz, tmin, tmax); \
 		else printf("leaf %d %f %f", poz-int_nodes.size(), tmin, tmax); }
 
 #define GO_LEFT  { \
@@ -331,7 +331,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_kd()
 				PHInternalNode &n = int_nodes[poz];
 
 				// d(line, center) <= radius ?
-				vector3d_t pc = n.c - ray.from;				
+				vector3d_t pc = n.c - ray.from;
 				float d2 = (pc ^ ray.dir).lengthSqr();
 				float r2 = n.r * n.r;
 				if(d2 > r2) {
@@ -342,7 +342,7 @@ void photonIntegratorGPU_t::RayTest::test_intersect_kd()
 				float P = ray.from[n.coord];
 				float M = n.M;
 				float R = ray.dir[n.coord];
-				
+
 				if(P < M) {
 					if(R <= 0)			//  <-P   M
 						GO_LEFT
@@ -433,12 +433,12 @@ void photonIntegratorGPU_t::RayTest::test_intersect_kd()
 			if(depth == 0)
 				return;
 			depth--;
-			
+
 			int mask = (1<<depth);
 			if(stack & mask) {
-				
-				stack &= ~mask;	
-				
+
+				stack &= ~mask;
+
 				int p = poz / 2;
 				// move tmin forward
 				PHInternalNode &n = int_nodes[p];
@@ -479,14 +479,14 @@ void photonIntegratorGPU_t::RayTest::test_intersect_kd()
 						break;
 					}
 				}
-				
+
 				// traverse sibling
 				depth++;
 				poz += -(poz % 2) * 2 + 1;
 				REPORT
 				break;
 			}
-			
+
 			poz /= 2;
 			REPORT
 		}
@@ -601,7 +601,7 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 
 	int max_dim = std::max(width, height);
 
-	Y_INFO << yendl << "benchmarking image of size " << width << " * " << height << " * " << AAsamples << " samples" << yendl; 
+	Y_INFO << yendl << "benchmarking image of size " << width << " * " << height << " * " << AAsamples << " samples" << yendl;
 
 	surfacePoint_t sp;
 	clock_t start, end;
@@ -632,10 +632,10 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 
 		progressBar_t *pb = new ConsoleProgressBar_t(80);
 		pb->init(128);
-		int pbStep = std::max(1, nr_rays/128); 
+		int pbStep = std::max(1, nr_rays/128);
 		int nextStep = pbStep;
 
-		
+
 		start = clock();
 		for(int i = 0; i < nr_rays; i+=ts2)
 		{
@@ -658,7 +658,7 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 		pb->done();
 		delete pb;
 		float dt1 = ((float)(end-start)/CLOCKS_PER_SEC);
-		
+
 		pb = new ConsoleProgressBar_t(80);
 		pb->init(128);
 		nextStep = pbStep;

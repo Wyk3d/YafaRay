@@ -20,6 +20,7 @@ public:
 };
 
 class CLKernel;
+class CLContext;
 
 template<class T>
 class CLVectorBufferRange;
@@ -56,10 +57,7 @@ class CLVectorBuffer : public std::vector<T>
 			}
 		}
 
-		void init(CLContext *context, CLError *error)
-		{
-			initBuffer(context->getId(), 0, size(), buffer, error);
-		}
+		void init(CLContext *context, CLError *error); // in cl_context.h
 
 		~CLVectorBuffer() {
 			if(buffer) {
@@ -72,7 +70,7 @@ class CLVectorBuffer : public std::vector<T>
 		CLVectorBufferRange<T> range(size_t offset, size_t length);
 		CLVectorBufferRange<T> range(size_t vec_offset, size_t buf_offset, size_t length);
 
-		operator typename CLVectorBufferRange<T>();
+		operator CLVectorBufferRange<T>();
 };
 
 template<class T>
@@ -111,8 +109,8 @@ CLVectorBufferRange<T> CLVectorBuffer<T>::range(size_t vec_offset, size_t buf_of
 }
 
 template<class T>
-CLVectorBuffer<T>::operator typename CLVectorBufferRange<T>() {
-	return CLVectorBufferRange<T>(*this, 0, 0, size());
+CLVectorBuffer<T>::operator CLVectorBufferRange<T>() {
+	return CLVectorBufferRange<T>(*this, 0, 0, this->size());
 }
 
 #endif //_CL_BUFFER_H

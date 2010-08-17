@@ -13,14 +13,12 @@ class CLContext :
 	public CLContextBase
 {
 	private:
-		
-
 		CLContext(cl_context id) : CLContextBase(id) {
-			// AMD specific hack => can only have one context per APP
-			assert(null_mem == NULL);
+			// AMD specific hack => can only have one context per app
+			assert(NullMemStore::null_mem == NULL);
 			cl_int err;
-			null_mem = clCreateBuffer(id, CL_MEM_READ_WRITE, 1, NULL, &err);
-			assert(err == CL_SUCCESS && null_mem != NULL);
+			NullMemStore::null_mem = clCreateBuffer(id, CL_MEM_READ_WRITE, 1, NULL, &err);
+			assert(err == CL_SUCCESS && NullMemStore::null_mem != NULL);
 		}
 
 		friend void CLContextBase::free(CLError *error);
@@ -37,8 +35,8 @@ class CLContext :
 
 		static cl_int ReleaseFunc(cl_context id) {
 			// AMD specific hack
-			assert(null_mem);
-			cl_int err = clReleaseMemObject(null_mem);
+			assert(NullMemStore::null_mem);
+			cl_int err = clReleaseMemObject(NullMemStore::null_mem);
 			assert(err == CL_SUCCESS);
 			return clReleaseContext(id);
 		}
@@ -93,9 +91,13 @@ class CLContext :
 
 			return err ? NULL : new CLProgram(program);
 		}
-	public:
-		// AMD specific hack
-		static cl_mem null_mem;
 };
+
+// TODO: find a way to put this closer to cl_buffer :|
+template<class T>
+void CLVectorBuffer<T>::init(CLContext *context, CLError *error)
+{
+	initBuffer(context->getId(), 0, this->size(), buffer, error);
+}
 
 #endif //_CL_CONTEXT_H
