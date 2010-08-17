@@ -17,6 +17,7 @@ protected:
 
 	}
 
+	friend void CLProgramBase::free(CLError *error);
 	~CLProgram() {
 
 	}

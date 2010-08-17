@@ -17,6 +17,7 @@ protected:
 
 	}
 
+	friend void CLMemBase::free(CLError *error);
 	~CLMem() {
 
 	}

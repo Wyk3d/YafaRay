@@ -17,6 +17,7 @@ class CLKernel :
 
 		}
 
+		friend void CLKernelBase::free(CLError *error);
 		~CLKernel() {
 			
 		}
@@ -76,18 +77,10 @@ class CLKernel :
 					if(mem != NULL) {
 						mem_id_ptr = &mem->getId();
 					} else {
-						static cl_mem null_mem = NULL;
 						// a crude hack to work around a bug in AMD's implementation
 						// which gives an error if NULL is passed
-						// not thread safe, won't work in multiple contexts etc .. ok for now
-						if(null_mem == NULL) {
-							cl_context context;
-							int err = clGetKernelInfo(id, CL_KERNEL_CONTEXT, sizeof(cl_context), &context, NULL);
-							assert(err == CL_SUCCESS);
-							null_mem = clCreateBuffer(context, CL_MEM_READ_WRITE, 1, NULL, &err);
-							assert(err == CL_SUCCESS && null_mem != NULL);
-						}
-						mem_id_ptr = &null_mem;
+						mem_id_ptr = &CLContext::null_mem;
+						assert(mem_id_ptr != NULL);
 					}
 
 					return err = clSetKernelArg(id, idx, sizeof(cl_mem), mem_id_ptr);
@@ -112,16 +105,10 @@ class CLKernel :
 					if(vec.buffer != NULL) {
 						mem_id_ptr = &vec.buffer->getId();
 					} else {
-						static cl_mem null_mem = NULL;
 						// a crude hack to work around a bug in AMD's implementation
 						// which gives an error if NULL is passed
-						// not thread safe, won't work in multiple contexts etc .. ok for now
-						if(null_mem == NULL) {
-							int err;
-							null_mem = clCreateBuffer(context, CL_MEM_READ_WRITE, 1, NULL, &err);
-							assert(err == CL_SUCCESS && null_mem != NULL);
-						}
-						mem_id_ptr = &null_mem;
+						mem_id_ptr = &CLContext::null_mem;
+						assert(mem_id_ptr != NULL);
 					}
 					
 					return err = clSetKernelArg(id, idx, sizeof(cl_mem), mem_id_ptr);

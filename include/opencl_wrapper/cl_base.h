@@ -169,7 +169,7 @@ class CLObjectReleasableInfoBase :
 
 			if(!(err = CLObject::ReleaseFunc(this->id)) || error == NULL) {
 				this->id = NULL;
-				delete this;
+				delete static_cast<CLObject*>(this);
 			}
 		}
 };

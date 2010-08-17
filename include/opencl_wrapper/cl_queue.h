@@ -19,6 +19,11 @@ class CLCommandQueue
 
 		}
 
+		friend void CLCommandQueueBase::free(CLError *error);
+		~CLCommandQueue()
+		{
+		}
+
 		mutable yafthreads::mutex_t mutex;
 	public:
 		static cl_int InfoFunc(cl_command_queue id, cl_command_queue_info info, size_t param_size, void* param_value, size_t* param_size_ret) {

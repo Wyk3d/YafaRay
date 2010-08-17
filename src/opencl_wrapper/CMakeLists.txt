@@ -2,7 +2,8 @@ include_directories(${YAF_INCLUDE_DIRS} ${OPENCL_INCLUDE_DIR})
 
 set(YF_OPENCL_SOURCES 	cl_error.cc
 						cl_platform.cc
-						cl_util.cc)
+						cl_util.cc
+						cl_context.cc)
 
 add_library(opencl_wrapper STATIC ${YF_OPENCL_SOURCES})
 
