@@ -119,6 +119,7 @@ class CLCommandQueue
 				NULL, NULL, &ev);
 			if(err) return;
 			clWaitForEvents(1, &ev);
+			clReleaseEvent(ev);
 		}
 };
 
