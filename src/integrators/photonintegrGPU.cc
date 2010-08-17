@@ -1421,6 +1421,7 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	int ph_work_group_size = 32;
 	bool ph_benchmark_ray_count = false;
 	int ph_benchmark_min_tile_size = 32;
+	bool ph_benchmark_reverse = false;
 	int ph_candidate_multi = 15;
 
 	params.getParam("transpShad", transpShad);
@@ -1450,6 +1451,7 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	params.getParam("ph_work_group_size", ph_work_group_size);
 	params.getParam("ph_benchmark_ray_count", ph_benchmark_ray_count);
 	params.getParam("ph_benchmark_min_tile_size", ph_benchmark_min_tile_size);
+	params.getParam("ph_benchmark_reverse", ph_benchmark_reverse);
 	params.getParam("ph_candidate_multi", ph_candidate_multi);
 
 	// TODO: override thread count and tile size settings if benchmarking is enabled
@@ -1475,6 +1477,7 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	ite->ph_benchmark_ray_count = ph_benchmark_ray_count;
 	ite->ph_candidate_multi = ph_candidate_multi;
 	ite->ph_benchmark_min_tile_size = ph_benchmark_min_tile_size;
+	ite->ph_benchmark_reverse = ph_benchmark_reverse;
 
 	return ite;
 }
@@ -1857,7 +1860,7 @@ void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBuffe
 	if(ph_test_rays)
 	{
 		RayTest test(*this, this->pHierarchy);
-		test.test_rays(state);
+		test.test_rays(state, s, e);
 	}
 }
 

@@ -42,18 +42,15 @@ void photonIntegratorGPU_t::RayTest::init_test(const diffRay_t &diff_ray)
 	cand_tris.clear();
 }
 
-void photonIntegratorGPU_t::RayTest::test_rays(phRenderState_t &r_state)
+void photonIntegratorGPU_t::RayTest::test_rays(phRenderState_t &r_state, int s, int e)
 {
 	state = &r_state;
 	std::vector<diffRay_t> &c_rays = state->c_rays;
 
-	for(std::vector<diffRay_t>::iterator itr = c_rays.begin(), next; itr != c_rays.end(); itr = next)
+	for(int i = s; i < e; i++)
 	{
-		next = itr;
-		++next;
-
 		// init test
-		init_test((*itr));
+		init_test(c_rays[i]);
 
 		hit_ref = scene->intersect(ray, sp_ref);
 
@@ -602,18 +599,21 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 		return;
 	}
 
-	int max_size = std::max(width, height);
+	int max_dim = std::max(width, height);
 
 	Y_INFO << yendl << "benchmarking image of size " << width << " * " << height << " * " << AAsamples << " samples" << yendl; 
 
 	surfacePoint_t sp;
 	clock_t start, end;
 
-	int max_tile_size = 1;
-	while(max_tile_size <= max_size) max_tile_size *= 2;
+	int max_size = 1;
+	while(max_size <= max_dim) max_size *= 2;
+	int min_size = pi.ph_benchmark_min_tile_size;
+	bool reverse = pi.ph_benchmark_reverse;
 
-	//for(int tile_size = pi.ph_benchmark_min_tile_size; tile_size <= max_tile_size; tile_size *= 2) 
-	for(int tile_size = max_tile_size; tile_size >= pi.ph_benchmark_min_tile_size; tile_size /= 2)
+	int tile_size = reverse ? max_size : min_size;
+
+	while( (reverse && tile_size >= min_size) || (!reverse && tile_size <= max_size))
 	{
 		int ts2 = tile_size * tile_size * AAsamples;
 
@@ -668,6 +668,9 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 		Y_INFO << "tile size " << tile_size << ": ";
 		Y_INFO << dt1 << "s (" << nr_rays / dt1 << " rays/sec) / ";
 		Y_INFO << dt2 << "s (" << nr_rays / dt2 << " rays/sec)" << yendl;
+
+		if(reverse) tile_size /= 2;
+		else tile_size *= 2;
 	}
 }
 

@@ -164,7 +164,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 
 			}
 
-			void test_rays(phRenderState_t &state);
+			void test_rays(phRenderState_t &state, int s, int e);
 			void init_test(const diffRay_t &ray);
 
 			void test_intersect_sh();
@@ -217,6 +217,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		int ph_work_group_size;
 		bool ph_benchmark_ray_count;
 		int ph_benchmark_min_tile_size;
+		bool ph_benchmark_reverse;
 		int ph_candidate_multi;
 
 		friend class RayStorer;
