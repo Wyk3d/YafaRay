@@ -40,11 +40,33 @@ class CLCommandQueue
 			return getInfo<cl_context>(CL_QUEUE_CONTEXT, error);
 		}
 
-		void writeBuffer(const CLBuffer *buffer, size_t offset, size_t size, const void *mem, CLError *error = NULL) {
-			yafthreads::guard_t guard(mutex);
+		template<class T>
+		void writeBuffer(CLVectorBuffer<T> vec, CLError *error = NULL)  {
+			writeBuffer(vec.buffer, 0, vec, 0, vec.size(), error);
+		}
 
+		template<class T>
+		void writeBuffer(CLVectorBufferRange<T> range, CLError *error = NULL)  {
+			writeBuffer(range.vec.buffer, range.buf_offset, range.vec, range.vec_offset, range.length, error);
+		}
+
+		template<class T>
+		void writeBuffer(CLBuffer *&buffer, std::vector<T> &vec, CLError *error = NULL)  {
+			writeBuffer(buffer, 0, vec, 0, vec.size(), error);
+		}
+
+		template<class T>
+		void writeBuffer(CLBuffer *&buffer, size_t to_offset, std::vector<T> &vec, size_t from_offset, size_t length, CLError *error = NULL)  {
 			CLErrGuard err(error);
-			err = clEnqueueWriteBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
+
+			assert(from_offset + length <= vec.size());
+
+			cl_context context = getContext(&err);
+			if(err) return;
+			CLVectorBuffer<T>::initBuffer(context, to_offset, length, buffer, &err);
+			if(err) return;
+
+			writeBuffer(buffer, to_offset * sizeof(T), length * sizeof(T), &vec[from_offset], &err);
 		}
 
 		void writeBuffer(const CLBuffer *buffer, void *mem, CLError *error = NULL) {
@@ -54,28 +76,41 @@ class CLCommandQueue
 			writeBuffer(buffer, 0, size, mem, &err);
 		}
 
-		template<class T>
-		void writeBuffer(CLVectorBuffer<T> &vec, CLError *error = NULL)  {
-			writeBuffer(vec.buffer, vec, error);
-		}
-
-		template<class T>
-		void writeBuffer(CLBuffer *&buffer, std::vector<T> &vec, CLError *error = NULL)  {
-			CLErrGuard err(error);
-
-			cl_context context = getContext(&err);
-			if(err) return;
-			CLVectorBuffer<T>::initBuffer(context, vec, buffer, &err);
-			if(err) return;
-
-			writeBuffer(buffer, 0, vec.size() * sizeof(T), &vec[0], &err);
-		}
-
-		void readBuffer(const CLBuffer *buffer, size_t offset, size_t size, void *mem, CLError *error = NULL) {
+		void writeBuffer(const CLBuffer *buffer, size_t offset, size_t size, const void *mem, CLError *error = NULL) {
 			yafthreads::guard_t guard(mutex);
 
 			CLErrGuard err(error);
-			err = clEnqueueReadBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
+			err = clEnqueueWriteBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
+		}
+
+		template<class T>
+		void readBuffer(CLBuffer *&buffer, std::vector<T> &vec, CLError *error = NULL) {
+			readBuffer(buffer, 0, vec, 0, vec.size(), error);
+		}
+
+		template<class T>
+		void readBuffer(CLVectorBuffer<T> &vec, CLError *error = NULL) {
+			readBuffer(vec.buffer, 0, vec, 0, vec.size(), error);
+		}
+
+		template<class T>
+		void readBuffer(CLVectorBufferRange<T> &range, CLError *error = NULL) {
+			readBuffer(range.vec.buffer, range.buf_offset, range.vec, range.vec_offset, range.length, error);
+		}
+
+		template<class T>
+		void readBuffer(CLBuffer *&buffer, size_t from_offset, std::vector<T> &vec, size_t to_offset, size_t length, CLError *error = NULL) {
+			CLErrGuard err(error);
+
+			if(!buffer) return;
+			size_t buf_size = buffer->getSize(&err);
+			if(err) return;
+
+			assert((from_offset + length) * sizeof(T) <= buf_size);
+			if(to_offset + length > vec.size())
+				vec.resize(to_offset + length);
+
+			readBuffer(buffer, from_offset * sizeof(T), length * sizeof(T), &vec[to_offset], &err);
 		}
 
 		void readBuffer(const CLBuffer *buffer, void *mem, CLError *error = NULL) {
@@ -84,25 +119,12 @@ class CLCommandQueue
 			if(err) return;
 			readBuffer(buffer, 0, size, mem, &err);
 		}
+		
+		void readBuffer(const CLBuffer *buffer, size_t offset, size_t size, void *mem, CLError *error = NULL) {
+			yafthreads::guard_t guard(mutex);
 
-		template<class T>
-		void readBuffer(CLVectorBuffer<T> &vec, CLError *error = NULL) {
-			readBuffer(vec.buffer, vec, error);
-		}
-
-		template<class T>
-		void readBuffer(CLBuffer *&buffer, std::vector<T> &vec, CLError *error = NULL) {
 			CLErrGuard err(error);
-
-			if(!buffer) return;
-			size_t size = buffer->getSize(&err);
-			if(err) return;
-
-			if(size > vec.size() * sizeof(T)) {
-				vec.resize(size / sizeof(T));
-			}
-
-			readBuffer(buffer, 0, size, &vec[0], &err);
+			err = clEnqueueReadBuffer(id, buffer->getId(), true, offset, size, mem, 0, NULL, NULL);
 		}
 
 		template<class Range>

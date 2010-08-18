@@ -1198,6 +1198,11 @@ bool photonIntegratorGPU_t::getSPfromHit(const diffRay_t &ray, int tri_idx, surf
 {
 	if(tri_idx == -1)
 		return false;
+	if(tri_idx < -1 || tri_idx >= prims.size())
+	{
+		Y_ERROR << "invalid tri_idx " << tri_idx << " returned" << yendl;
+		return false;
+	}
 
 	unsigned char udat[PRIM_DAT_SIZE];
 
@@ -1772,7 +1777,14 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 		RayTest test(*this, this->pHierarchy);
 		test.benchmark_ray_count(state);
 	} else {
-		intersect_rays(state, ph_rays, 0, ph_rays.size(), inter_tris);
+		inter_tris.resize(ph_rays.size());
+		if(ph_test_rays) {
+			// initialize
+			queue->writeBuffer(inter_tris, &err); 
+			checkErr(err, "failed to initialize d_inter_tris");
+		}
+
+		intersect_rays(state, ph_rays, inter_tris);
 
 		prng.reset(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
 		raygen_rt.genRays();
@@ -1784,9 +1796,9 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	return true;
 }
 
-void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBuffer<PHRay> &rays, int s, int e, CLVectorBuffer<int> &inter_tris)
+void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBufferRange<PHRay> rays, CLVectorBufferRange<int> inter_tris)
 {
-	int nr_rays = e - s;
+	int nr_rays = rays.length;
 	if(nr_rays == 0)
 		return;
 
@@ -1794,18 +1806,11 @@ void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBuffe
 	queue->writeBuffer(rays, &err);
 	checkErr(err, "failed to write d_rays");
 
-	inter_tris.resize(rays.size());
-	if(ph_test_rays) {
-		// initialize
-		queue->writeBuffer(inter_tris, &err); 
-		checkErr(err, "failed to initialize d_inter_tris");
-	}
-
 	CLVectorBuffer<float> dbg;
 
 	static int use_debug_buffer = ph_test_rays;
 	if(use_debug_buffer) {
-		dbg.resize(8*rays.size());
+		dbg.resize(8*nr_rays);
 		queue->writeBuffer(dbg, &err);
 		checkErr(err, "failed to init dbg");
 	}
@@ -1833,7 +1838,7 @@ void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBuffe
 		d_tris,
 		(int)prims.size(),
 		rays,
-		(int)rays.size(),
+		nr_rays,
 		inter_tris,
 		dbg,
 		use_debug_buffer,
@@ -1842,7 +1847,7 @@ void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBuffe
 	checkErr(err, "failed to set kernel args");
 
 	int local_size = ph_work_group_size;
-	int global_size = rays.size();
+	int global_size = nr_rays;
 	if(global_size % local_size != 0) 
 		global_size = (global_size / local_size + 1) * (local_size);
 
@@ -1860,7 +1865,7 @@ void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBuffe
 	if(ph_test_rays)
 	{
 		RayTest test(*this, this->pHierarchy);
-		test.test_rays(state, s, e);
+		test.test_rays(state, rays.vec_offset, rays.vec_offset + rays.length); // not sure about the range
 	}
 }
 
@@ -1979,27 +1984,27 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			for(int i = 0; i < nr_tris; ++i)
 			{
 				PHTriangle tri = tris[i];
-				float edge1[3], edge2[3], tvec[3], pvec[3], qvec[3];
-				float det, inv_det, u, v;
-				sub(tri.b, tri.a, edge1);
-				sub(tri.c, tri.a, edge2);
-				_cross(ray.r, edge2, pvec);
-				det = _dot(edge1, pvec);
+				float ab[3], ac[3], ap[3], rxac[3], apxab[3];
+				float det, u, v;
+				sub(tri.b, tri.a, ab);
+				sub(tri.c, tri.a, ac);
+				_cross(ray.r, ac, rxac);
+				det = _dot(ab, rxac);
 				//if (/*(det>-0.000001) && (det<0.000001))
 				if (det == 0.0f)
 					continue;
-				inv_det = 1.0f / det;
-				sub(ray.p, tri.a, tvec);
-				u = _dot(tvec,pvec) * inv_det;
+				det = 1.0f / det;
+				sub(ray.p, tri.a, ap);
+				u = _dot(ap,rxac) * det;
 				if (u < 0.0f || u > 1.0f)
 					continue;
-				_cross(tvec,edge1,qvec);
-				v = _dot(ray.r,qvec) * inv_det;
+				_cross(ap,ab,apxab);
+				v = _dot(ray.r,apxab) * det;
 				if ((v<0.0f) || ((u+v)>1.0f) )
 					continue;
-				float t = _dot(edge2,qvec) * inv_det;
-				if(t < t_cand) {
-					t_cand = t;
+				det = _dot(ac,apxab) * det;
+				if(det < t_cand) {
+					t_cand = det - 1;
 					cand = i;
 				}
 			}

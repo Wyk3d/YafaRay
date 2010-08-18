@@ -98,12 +98,40 @@ class CLKernel :
 					
 					cl_context context;
 					clGetKernelInfo(id, CL_KERNEL_CONTEXT, sizeof(cl_context), &context, NULL);
-					CLVectorBuffer<T>::initBuffer(context, vec, vec.buffer, &err);
+					CLVectorBuffer<T>::initBuffer(context, 0, vec.size(), vec.buffer, &err);
 					if(err) return false;
 
 					const void *mem_id_ptr;
 					if(vec.buffer != NULL) {
 						mem_id_ptr = &vec.buffer->getId();
+					} else {
+						// a crude hack to work around a bug in AMD's implementation
+						// which gives an error if NULL is passed
+						mem_id_ptr = &CLContext::null_mem;
+						assert(mem_id_ptr != NULL);
+					}
+					
+					return err = clSetKernelArg(id, idx, sizeof(cl_mem), mem_id_ptr);
+				}
+		};
+
+		template< class T >
+		class SetArgHelper< CLVectorBufferRange<T> >
+		{
+			public:
+				bool set(cl_kernel id, cl_uint idx, CLVectorBufferRange<T> const& c_range, CLError *error) {
+					CLErrGuard err(error);
+
+					CLVectorBufferRange<T> &range = *((CLVectorBufferRange<T>*)&c_range);
+					
+					cl_context context;
+					clGetKernelInfo(id, CL_KERNEL_CONTEXT, sizeof(cl_context), &context, NULL);
+					CLVectorBuffer<T>::initBuffer(context, range.buf_offset, range.length, range.vec.buffer, &err);
+					if(err) return false;
+
+					const void *mem_id_ptr;
+					if(range.vec.buffer != NULL) {
+						mem_id_ptr = &range.vec.buffer->getId();
 					} else {
 						// a crude hack to work around a bug in AMD's implementation
 						// which gives an error if NULL is passed

@@ -125,7 +125,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 
 		void init_hieararchy();
 		void upload_hierarchy(PHierarchy &ph);
-		void intersect_rays(phRenderState_t &state, CLVectorBuffer<PHRay> &ph_rays, int s, int e, CLVectorBuffer<int> &inter_tris);
+		void intersect_rays(phRenderState_t &state, CLVectorBufferRange<PHRay> ph_rays, CLVectorBufferRange<int> inter_tris);
 
 
 		friend class RayTest;

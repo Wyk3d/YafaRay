@@ -613,6 +613,17 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 
 	int tile_size = reverse ? max_size : min_size;
 
+	CLError err;
+	// prevent multiple reallocation of the GPU buffers
+	CLVectorBuffer<PHRay> rays(nr_rays);
+	rays.init(pi.context, &err);
+	checkErr(err, "failed to init rays buffer");
+	state->inter_tris.resize(nr_rays);
+	state->inter_tris.init(pi.context, &err);
+	checkErr(err, "failed to init rays buffer");
+
+	checkErr(err, "failed to init inter_tris");
+
 	while( (reverse && tile_size >= min_size) || (!reverse && tile_size <= max_size))
 	{
 		int ts2 = tile_size * tile_size * AAsamples;
@@ -624,14 +635,17 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 		int pbStep = std::max(1, nr_rays/128); 
 		int nextStep = pbStep;
 
+		
 		start = clock();
 		for(int i = 0; i < nr_rays; i+=ts2)
 		{
 			int j = std::min(i+ts2,nr_rays);
-			pi.intersect_rays(*state, state->ph_rays, i, j, state->inter_tris);
+			// TODO: this can be done without copying in OpenCL 1.1 by using sub buffers
+			std::copy(state->ph_rays.begin() + i, state->ph_rays.begin() + j, rays.begin());
+			pi.intersect_rays(*state, rays.range(0,j-i), state->inter_tris.range(0,j-i));
 			for(int k = i; k < j; k++) {
 				diffRay_t &pRay = state->c_rays[k];
-				pRay.idx = k;
+				pRay.idx = k-i;
 				pi.getSPforRay(pRay, *state, sp);
 			}
 
@@ -665,9 +679,9 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 		delete pb;
 		float dt2 = ((float)(end-start)/CLOCKS_PER_SEC);
 
-		Y_INFO << "tile size " << tile_size << ": ";
-		Y_INFO << dt1 << "s (" << nr_rays / dt1 << " rays/sec) / ";
-		Y_INFO << dt2 << "s (" << nr_rays / dt2 << " rays/sec)" << yendl;
+		Y_INFO << "tile size " << tile_size << ": "
+			   << dt1 << "s (" << nr_rays / dt1 << " rays/sec) / "
+			   << dt2 << "s (" << nr_rays / dt2 << " rays/sec)" << yendl;
 
 		if(reverse) tile_size /= 2;
 		else tile_size *= 2;
