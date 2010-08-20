@@ -1416,18 +1416,18 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	float dsRad=0.1;
 	float cRad=0.01;
 	float gatherDist=0.2;
-	float ph_leaf_radius=0.1;
-	float ph_area_multiplier=3;
+	float ph_leaf_radius=0.3;
+	float ph_area_multiplier=6;
 	bool fg_OCL = false;
 	bool ph_show_cover = false;
 	bool ph_test_rays = false;
 	bool ph_test_fg = false;
-	int ph_method = 0;
+	int ph_method = 1;
 	int ph_work_group_size = 32;
 	bool ph_benchmark_ray_count = false;
-	int ph_benchmark_min_tile_size = 32;
+	int ph_benchmark_min_tile_size = 4;
 	bool ph_benchmark_reverse = false;
-	int ph_candidate_multi = 15;
+	int ph_candidate_multi = 50;
 
 	params.getParam("transpShad", transpShad);
 	params.getParam("shadowDepth", shadowDepth);
