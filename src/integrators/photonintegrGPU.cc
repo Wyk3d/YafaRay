@@ -1759,39 +1759,42 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 	RayStorer raygen_rs(a, n_samples, offset, adaptive, this, state);
 	raygen_rs.genRays();
 
-	const char *kernel_name = "intersect_rays";
-	switch(ph_method) {
-		case 1:
-			kernel_name = "intersect_rays_test";
-			break;
-		case 2:
-			kernel_name = "intersect_rays_test2";
-			break;
-	}
-
-	CLError err;
-	state.intersect_kernel = program->createKernel(kernel_name, &err);
-	checkErr(err || !state.intersect_kernel, "failed to create kernel");
-
-	if(ph_benchmark_ray_count) {
-		RayTest test(*this, this->pHierarchy);
-		test.benchmark_ray_count(state);
-	} else {
-		inter_tris.resize(ph_rays.size());
-		if(ph_test_rays) {
-			// initialize
-			queue->writeBuffer(inter_tris, &err); 
-			checkErr(err, "failed to initialize d_inter_tris");
+	if(!ph_rays.empty() || ph_benchmark_ray_count)
+	{
+		const char *kernel_name = "intersect_rays";
+		switch(ph_method) {
+			case 1:
+				kernel_name = "intersect_rays_test";
+				break;
+			case 2:
+				kernel_name = "intersect_rays_test2";
+				break;
 		}
 
-		intersect_rays(state, ph_rays, inter_tris);
+		CLError err;
+		state.intersect_kernel = program->createKernel(kernel_name, &err);
+		checkErr(err || !state.intersect_kernel, "failed to create kernel");
 
-		prng.reset(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
-		raygen_rt.genRays();
+		if(ph_benchmark_ray_count) {
+			RayTest test(*this, this->pHierarchy);
+			test.benchmark_ray_count(state);
+		} else {
+			inter_tris.resize(ph_rays.size());
+			if(ph_test_rays) {
+				// initialize
+				queue->writeBuffer(inter_tris, &err); 
+				checkErr(err, "failed to initialize d_inter_tris");
+			}
+
+			intersect_rays(state, ph_rays, inter_tris);
+
+			prng.reset(offset * (scene->getCamera()->resX() * a.Y + a.X) + 123);
+			raygen_rt.genRays();
+		}
+
+		state.intersect_kernel->free(&err);
+		checkErr(err, "failed to free kernel");
 	}
-
-	state.intersect_kernel->free(&err);
-	checkErr(err, "failed to free kernel");
 
 	return true;
 }
