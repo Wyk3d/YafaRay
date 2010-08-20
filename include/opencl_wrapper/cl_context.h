@@ -38,6 +38,7 @@ class CLContext :
 			assert(NullMemStore::null_mem);
 			cl_int err = clReleaseMemObject(NullMemStore::null_mem);
 			assert(err == CL_SUCCESS);
+			NullMemStore::null_mem = NULL;
 			return clReleaseContext(id);
 		}
 
