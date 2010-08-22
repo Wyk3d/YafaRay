@@ -18,10 +18,11 @@
 #include <utilities/sample_utils.h>
 #include <integrators/integr_utils.h>
 #include <opencl_wrapper/cl_wrapper.h>
+#include <opencl_wrapper/cl_util.h>
 
 __BEGIN_YAFRAY
 
-class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
+class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t, CLApplication
 {
 	public:
 		photonIntegratorGPU_t(unsigned int dPhotons, unsigned int cPhotons, bool transpShad=false, int shadowDepth = 4, float dsRad = 0.1f, float cRad = 0.01f);
@@ -120,10 +121,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		color_t finalGathering_orig(renderState_t &state, const surfacePoint_t &sp, const vector3d_t &wo) const;
 		color_t estimateOneDirect(renderState_t &state, const surfacePoint_t &sp, vector3d_t wo, const std::vector<light_t *>  &lights, int d1, int n)const;
 
-		CLDevice getOpenCLDevice();
-		CLPlatform getOpenCLPlatform();
-
-		void init_hieararchy();
+		void init_hierararchy();
 		void upload_hierarchy(PHierarchy &ph);
 		void intersect_rays(phRenderState_t &state, CLVectorBufferRange<PHRay> ph_rays, CLVectorBufferRange<int> inter_tris);
 
@@ -224,13 +222,6 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t
 		DiskVectorType disks;
 		PHierarchy pHierarchy;
 		std::vector<const triangle_t*> prims;
-
-		CLPlatform platform;
-		CLDevice device;
-		CLContext *context;
-		CLCommandQueue *queue;
-
-		std::string cl_build_options;
 
 		CLBuffer *d_int_nodes, *d_leaves, *d_tris;
 		CLProgram *program;

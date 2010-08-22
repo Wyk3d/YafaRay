@@ -18,6 +18,10 @@ private:
 	}
 
 public:
+	CLPlatform() : CLPlatformBase(0) {
+		
+	}
+
 	static cl_int InfoFunc(cl_platform_id id, cl_platform_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
 		return clGetPlatformInfo(id, info, param_size, param_value, param_size_ret);
 	}

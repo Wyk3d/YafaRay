@@ -27,3 +27,50 @@ CLProgram * buildCLProgram(const char *kernel_source, CLContext *context, CLDevi
 
 	return program;
 }
+
+CLApplication::CLApplication()
+{
+	CLError err;
+	CLMain cl;
+	std::list<CLPlatform> platforms = cl.getPlatforms(&err);
+	checkErr(err || platforms.empty(), "failed to find platforms\n");
+	bool first = true;
+	for(std::list<CLPlatform>::iterator p_itr = platforms.begin(); p_itr != platforms.end(); ++p_itr)
+	{
+		std::list<CLDevice> devices = p_itr->getDevices(&err);
+		checkErr(err || devices.empty(), "failed to find devices for the chosen platform");
+		for(std::list<CLDevice>::iterator d_itr = devices.begin(); d_itr != devices.end(); ++d_itr) {
+			if(first || d_itr->getType() == CL_DEVICE_TYPE_GPU) {
+				platform = *p_itr;
+				device = *d_itr;
+			}
+			first = false;
+		}
+	}
+
+	context = platform.createContext(device, &err);
+	checkErr(err || context == NULL, "failed to get a context for the chosen device\n");
+
+	queue = context->createCommandQueue(device, &err);
+	checkErr(err || queue == NULL, "failed to create command queue");
+
+	cl_uint vendor_id = device.getVendorId(&err);
+	checkErr(err, "failed to get device vendor");
+
+	if(vendor_id == CL_VENDOR_NVIDIA) {
+		cl_build_options += " -cl-nv-verbose";
+	}
+}
+
+CLApplication::~CLApplication()
+{
+	CLError err;
+	if(queue) {
+		queue->free(&err);
+		checkErr(err, "failed to free queue");
+	}
+	if(context) {
+		context->free(&err);
+		checkErr(err, "failed to free context");
+	}
+}

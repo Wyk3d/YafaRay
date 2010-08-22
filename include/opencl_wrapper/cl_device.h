@@ -19,6 +19,10 @@ private:
 
 	}
 public:
+	CLDevice() : CLDeviceBase(0) {
+
+	}
+
 	static cl_int InfoFunc(cl_device_id id, cl_device_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
 		return clGetDeviceInfo(id, info, param_size, param_value, param_size_ret);
 	}

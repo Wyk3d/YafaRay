@@ -30,8 +30,7 @@
 __BEGIN_YAFRAY
 
 photonIntegratorGPU_t::photonIntegratorGPU_t(unsigned int dPhotons, unsigned int cPhotons, bool transpShad, int shadowDepth, float dsRad, float cRad):
-	trShad(transpShad), finalGather(true), nPhotons(dPhotons), nCausPhotons(cPhotons), sDepth(shadowDepth), dsRadius(dsRad), cRadius(cRad),
-	platform(getOpenCLPlatform()), device(getOpenCLDevice())
+	trShad(transpShad), finalGather(true), nPhotons(dPhotons), nCausPhotons(cPhotons), sDepth(shadowDepth), dsRadius(dsRad), cRadius(cRad)
 {
 	type = SURFACE;
 	rDepth = 6;
@@ -41,20 +40,6 @@ photonIntegratorGPU_t::photonIntegratorGPU_t(unsigned int dPhotons, unsigned int
 	integratorName = "PhotonMapGPU";
 	integratorShortName = "PMG";
 	hasBGLight = false;
-
-	CLError err;
-	context = platform.createContext(device, &err);
-	checkErr(err || context == NULL, "failed to get a context for the chosen device\n");
-
-	queue = context->createCommandQueue(device, &err);
-	checkErr(err || queue == NULL, "failed to create command queue");
-
-	cl_uint vendor_id = device.getVendorId(&err);
-	checkErr(err, "failed to get device vendor");
-
-	if(vendor_id == CL_VENDOR_NVIDIA) {
-		cl_build_options += " -cl-nv-verbose";
-	}
 
 	d_int_nodes = NULL;
 	d_leaves = NULL;
@@ -157,11 +142,6 @@ photonIntegratorGPU_t::~photonIntegratorGPU_t()
 		d_tris->free(&err);
 		checkErr(err, "failed to free tris");
 	}
-
-	queue->free(&err);
-	checkErr(err, "failed to free queue");
-	context->free(&err);
-	checkErr(err, "failed to free context");
 }
 
 inline color_t photonIntegratorGPU_t::estimateOneDirect(renderState_t &state, const surfacePoint_t &sp, vector3d_t wo, const std::vector<light_t *>  &lights, int d1, int n)const
@@ -275,7 +255,7 @@ inline color_t photonIntegratorGPU_t::estimateOneDirect(renderState_t &state, co
 
 bool photonIntegratorGPU_t::preprocess()
 {
-	init_hieararchy();
+	init_hierararchy();
 	if(ph_show_cover || ph_benchmark_ray_count)
 		return true;
 
@@ -775,7 +755,7 @@ bool photonIntegratorGPU_t::preprocess()
 	return true;
 }
 
-void photonIntegratorGPU_t::init_hieararchy()
+void photonIntegratorGPU_t::init_hierararchy()
 {
 	pHierarchy.leaf_radius = ph_leaf_radius;
 	disks.clear();
@@ -2294,21 +2274,6 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 
 void photonIntegratorGPU_t::onSceneUpdate() {
 
-}
-
-CLPlatform photonIntegratorGPU_t::getOpenCLPlatform() {
-	CLError err;
-	CLMain cl;
-	std::list<CLPlatform> platforms = cl.getPlatforms(&err);
-	checkErr(err || platforms.empty(), "failed to find platforms\n");
-	return *platforms.begin();
-}
-
-CLDevice photonIntegratorGPU_t::getOpenCLDevice() {
-	CLError err;
-	std::list<CLDevice> devices = platform.getDevices(&err);
-	checkErr(err || devices.empty(), "failed to find devices for the chosen platform");
-	return *devices.begin();
 }
 
 extern "C"
