@@ -2111,8 +2111,8 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			unsigned int stack = 0;
 			unsigned int mask = 1;
 			unsigned int poz = 1;
-			while(1) {
-				while(1) { // going down
+			for(int tmp1 = 0; tmp1 < 10000000; tmp1++) {
+				for(int tmp2 = 0; tmp2 < 10000000; tmp2++) { // going down
 					if(poz < nr_int_nodes) { // check internal node
 						PHInternalNode n = int_nodes[poz];
 						// d(line, center) <= radius ?
@@ -2207,7 +2207,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 					poz *= 2;
 				}
 \n
-				while(1) // going up
+				for(int tmp3 = 0; tmp3 < 10000000; tmp3++) // going up
 				{
 					mask >>= 1;
 					if(!mask) {
