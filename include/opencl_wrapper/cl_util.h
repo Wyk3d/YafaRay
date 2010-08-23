@@ -17,9 +17,9 @@ checkErr(CLCombinedError err, const char * message = "", bool fatal = true)
 	}
 }
 
-CLProgram * buildCLProgram(const char *kernel_source, CLContext *context, CLDevice device, const char *options = NULL);
+OPENCL_WRAPPER_EXPORT CLProgram * buildCLProgram(const char *kernel_source, CLContext *context, CLDevice device, const char *options = NULL);
 
-class CLApplication
+class OPENCL_WRAPPER_EXPORT CLApplication
 {
 	public:
 		CLApplication();

@@ -5,7 +5,7 @@
 class NullMemStore
 {
 	public:
-		static cl_mem null_mem;
+		OPENCL_WRAPPER_EXPORT static cl_mem null_mem;
 };
 
 class CLKernel;

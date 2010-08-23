@@ -18,7 +18,7 @@ public:
 		return hasFailed();
 	}
 
-	CLCombinedError operator || (bool error_condition);
+	OPENCL_WRAPPER_EXPORT CLCombinedError operator || (bool error_condition);
 
 	operator bool () const {
 		return hasFailed();

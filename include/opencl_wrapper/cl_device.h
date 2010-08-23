@@ -200,7 +200,7 @@ public:
 		return getInfo<cl_command_queue_properties>(CL_DEVICE_QUEUE_PROPERTIES, error);
 	}
 
-	CLPlatform getPlatform(CLError *error = NULL);
+	OPENCL_WRAPPER_EXPORT CLPlatform getPlatform(CLError *error = NULL);
 
 	std::string getName(CLError *error = NULL) {
 		return getStringInfo(CL_DEVICE_NAME, error);
