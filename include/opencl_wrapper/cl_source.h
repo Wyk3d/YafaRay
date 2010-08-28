@@ -104,8 +104,7 @@ class CLSrcParamMap
 
 		}
 
-		operator std::string() {
-			std::ostringstream ss;
+		void generate(std::ostringstream &ss) {
 			ss << "#define PARAM_CONST_" << name << "(__param_var) ";
 			ss << "DECL_PARAM_" << name << "(__param_var, __constant)\n";
 
@@ -134,7 +133,42 @@ class CLSrcParamMap
 				}
 			}
 			ss << "}\n";
+		}
+
+		operator std::string() {
+			std::ostringstream ss;
+			generate(ss);
 			return ss.str();
+		}
+};
+
+class CLSrcGenerator
+{
+	private:
+		std::ostringstream ss;
+		std::string final_str;
+		const char *program_source;
+
+	public:
+		CLSrcGenerator(const char *program_source)
+			: program_source(program_source)
+		{
+			
+		}
+
+		void addDebug(bool debug) {
+			if(debug) ss << "#define IF_DEBUG(...) __VA_ARGS__\n";
+			else ss << "#define IF_DEBUG(...)\n";
+		}
+
+		void addParamMap(CLSrcParamMap &map) {
+			map.generate(ss);
+		}
+
+		operator const char *() {
+			final_str = ss.str() + program_source;
+			ss.clear();
+			return final_str.c_str();
 		}
 };
 

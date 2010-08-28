@@ -1808,25 +1808,38 @@ void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBuffe
 		int nr_tris,
 		__global PHRay *rays,
 		int nr_rays,
-		__global int *inter_tris,
-		__global float *dbg,
-		int do_debug
+		__global int *inter_tris
+		IF_DEBUG(, __global float *dbg)
 	){
 	*/
-	state.intersect_kernel->setArgs(
-		d_int_nodes,
-		(int)pHierarchy.int_nodes.size(),
-		d_leaves,
-		pHierarchy.leaf_radius,
-		d_tris,
-		(int)prims.size(),
-		rays,
-		nr_rays,
-		inter_tris,
-		dbg,
-		use_debug_buffer,
-		&err
-	);
+	if(!ph_test_rays) {
+		state.intersect_kernel->setArgs(
+			d_int_nodes,
+			(int)pHierarchy.int_nodes.size(),
+			d_leaves,
+			pHierarchy.leaf_radius,
+			d_tris,
+			(int)prims.size(),
+			rays,
+			nr_rays,
+			inter_tris,
+			&err
+		);
+	} else {
+		state.intersect_kernel->setArgs(
+			d_int_nodes,
+			(int)pHierarchy.int_nodes.size(),
+			d_leaves,
+			pHierarchy.leaf_radius,
+			d_tris,
+			(int)prims.size(),
+			rays,
+			nr_rays,
+			inter_tris,
+			dbg,
+			&err
+		);
+	}
 	checkErr(err, "failed to set kernel args");
 
 	int local_size = ph_work_group_size;
@@ -1870,14 +1883,14 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 	queue->writeBuffer(d_tris, ph.tris, &err);
 	checkErr(err, "failed to write d_tris");
 
-	const char * kernel_src = CL_SRC(
+	const char * program_src = CL_SRC(
 		typedef struct
 		{
 			float m[3];	// disk center
 			float n[3];	// disk normal
 			int tri_idx; // index of the triangle the disk belongs to
 		} PHLeaf;
-
+\n
 		typedef struct
 		{
 			float c[3];	// bounding sphere center
@@ -1885,18 +1898,18 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			int coord;
 			float M;
 		} PHInternalNode;
-
+\n
 		typedef struct 
 		{
 			float p[3]; // ray origin
 			float r[3]; // ray direction
 		} PHRay;
-
+\n
 		typedef struct
 		{
 			float a[3], b[3], c[3];
 		} PHTriangle;
-		
+\n
 
 		__kernel void test(
 			__global PHInternalNode *int_nodes, 
@@ -1911,51 +1924,50 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 
 			ret[0] = total;
 		}
-
+\n
 		void sub(float a[3], float b[3], float c[3]) {	// c = a - b
 			c[0] = a[0]-b[0];
 			c[1] = a[1]-b[1];
 			c[2] = a[2]-b[2];
 		}
-
+\n
 		void add(float a[3], float b[3], float c[3]) {	// c = a + b
 			c[0] = a[0]+b[0];
 			c[1] = a[1]+b[1];
 			c[2] = a[2]+b[2];
 		}
-
+\n
 		void _cross(float a[3], float b[3], float c[3]) { // c = a ^ b
 			c[0] = a[1]*b[2]-a[2]*b[1];
 			c[1] = a[2]*b[0]-a[0]*b[2];
 			c[2] = a[0]*b[1]-a[1]*b[0];
 		}
-
+\n
 		void mul(float a[3], float t, float b[3]) {	// b = t * a
 			b[0] = t * a[0];
 			b[1] = t * a[1];
 			b[2] = t * a[2];
 		}
-
+\n
 		float _dot(float a[3], float b[3]) {	// ret = a * b
 			return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 		}
-
+\n
 		float normSqr(float a[3]) {	// ret = |a|^2
 			return a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
 		}
 \n
 		__kernel void intersect_rays_test2(
-			 __global PHInternalNode *int_nodes, 
-			 int nr_int_nodes,
-			 __global PHLeaf *leaves,
-			 float leaf_radius,
-			 __global PHTriangle *tris,
-			 int nr_tris,
-			 __global PHRay *rays,
-			 int nr_rays,
-			 __global int *inter_tris,
-			 __global float *dbg,
-			 int do_debug
+			__global PHInternalNode *int_nodes, 
+			int nr_int_nodes,
+			__global PHLeaf *leaves,
+			float leaf_radius,
+			__global PHTriangle *tris,
+			int nr_tris,
+			__global PHRay *rays,
+			int nr_rays,
+			__global int *inter_tris
+			IF_DEBUG(, __global float *dbg)
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;
@@ -2004,9 +2016,8 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			 int nr_tris,
 			 __global PHRay *rays,
 			 int nr_rays,
-			 __global int *inter_tris,
-		     __global float *dbg,
-			 int do_debug
+			 __global int *inter_tris
+		     IF_DEBUG(, __global float *dbg)
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;
@@ -2059,26 +2070,28 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 						t_cand = t;
 						cand = l.tri_idx;
 
-						if(do_debug && get_global_id(0) == 290) {
-							int idx = get_global_id(0);
-							/*dbg[8*idx] = nr;
-							dbg[8*idx+1] = l.n[0];
-							dbg[8*idx+2] = l.n[1];
-							dbg[8*idx+3] = l.n[2];
-							dbg[8*idx+4] = ray.r[0];
-							dbg[8*idx+5] = ray.r[1];
-							dbg[8*idx+6] = ray.r[2];
-							dbg[8*idx+7] = (float)i;*/
-							dbg[0] = (float)i;
-							dbg[1] = nr;
-							dbg[2] = det;
-							dbg[3] = inv_det;
-							dbg[4] = u;
-							dbg[5] = v;
-							dbg[6] = t;
-							dbg[7] = d2;
-							dbg[8] = r2;
-						}
+						IF_DEBUG(
+							if(get_global_id(0) == 290) {
+								int idx = get_global_id(0);
+								/*dbg[8*idx] = nr;
+								dbg[8*idx+1] = l.n[0];
+								dbg[8*idx+2] = l.n[1];
+								dbg[8*idx+3] = l.n[2];
+								dbg[8*idx+4] = ray.r[0];
+								dbg[8*idx+5] = ray.r[1];
+								dbg[8*idx+6] = ray.r[2];
+								dbg[8*idx+7] = (float)i;*/
+								dbg[0] = (float)i;
+								dbg[1] = nr;
+								dbg[2] = det;
+								dbg[3] = inv_det;
+								dbg[4] = u;
+								dbg[5] = v;
+								dbg[6] = t;
+								dbg[7] = d2;
+								dbg[8] = r2;
+							}
+						)
 					}
 				}
 			}
@@ -2095,14 +2108,15 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			int nr_tris,
 			__global PHRay *rays,
 			int nr_rays,
-			__global int *inter_tris,
-			__global float *dbg,
-			int do_debug
+			__global int *inter_tris
+			IF_DEBUG(, __global float *dbg)
 		){
 			if(get_global_id(0) >= nr_rays)
 				return;
 
-			if(do_debug && get_global_id(0) == 883) dbg[0] = 555.1234f;
+			IF_DEBUG(
+				if(get_global_id(0) == 883) dbg[0] = 555.1234f;
+			)
 
 			PHRay ray = rays[get_global_id(0)];
 			float t_cand = FLT_MAX;
@@ -2182,7 +2196,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 								t_cand = t;
 								cand_tri = l.tri_idx;
 
-								if(do_debug) {
+								IF_DEBUG(
 									if(get_global_id(0) == 883) {
 										int idx = get_global_id(0);
 										dbg[0] = (float)(poz-nr_int_nodes);
@@ -2196,7 +2210,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 										dbg[8] = r2;
 									} else
 										dbg[0] = 666.0f;
-								}
+								)
 							}
 						}
 						break;
@@ -2211,8 +2225,10 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 				{
 					mask >>= 1;
 					if(!mask) {
-						if(do_debug && get_global_id(0) == 883 && cand_tri == 8)
-							dbg[1] = 1234.6542f;
+						IF_DEBUG(
+							if(get_global_id(0) == 883 && cand_tri == 8)
+								dbg[1] = 1234.6542f;
+						)
 						inter_tris[get_global_id(0)] = cand_tri;
 						return;
 					}
@@ -2230,7 +2246,10 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 		}
 	);
 
-	program = buildCLProgram(kernel_src, context, device, cl_build_options.c_str());
+	CLSrcGenerator src(program_src);
+	src.addDebug(ph_test_rays);
+
+	program = buildCLProgram(src, context, device, cl_build_options.c_str());
 	checkErr(err || !program, "failed to build program");
 
 	{

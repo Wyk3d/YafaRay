@@ -291,6 +291,34 @@ class CLKernel :
 			if(setArg(0, a0, &err)) return false;
 			return true;
 		}
+
+		class ArgStream
+		{
+			private:
+				CLKernel &kernel;
+				CLError err;
+				int idx;
+			public:
+				ArgStream(CLKernel &kernel, int idx) : kernel(kernel), idx(idx) {
+
+				}
+
+				ArgStream(const ArgStream &as) : kernel(as.kernel), err(as.err), idx(as.idx + 1) {
+					
+				}
+			
+				friend class CLKernel;
+
+				template<class A>
+				ArgStream operator << (const A &arg) {
+					if(err) return;
+					kernel.setArg(idx++, arg, &err);
+				}
+
+				void getErr(CLError *error) {
+					if(error != NULL) *error = err;
+				}
+		};
 };
 
 
