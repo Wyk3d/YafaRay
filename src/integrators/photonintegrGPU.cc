@@ -1603,7 +1603,11 @@ void photonIntegratorGPU_t::generate_points(DiskVectorType &disks, std::vector<c
 	}
 
 	prims.resize(total_prims);
-	ph.tris.resize(total_prims);
+	if(ph_method != 4 && ph_method != 2)
+		ph.tris.resize(total_prims);
+	else
+		// methods which go through all triangles must have them initialized
+		ph.tris.resize(total_prims, PHTriangle(point3d_t(0.0f, 0.0f, 0.0f), point3d_t(0.0f, 0.0f, 0.0f), point3d_t(0.0f, 0.0f, 0.0f)));
 
 	std::vector<int> nr_to_keep;
 	nr_to_keep.resize(total_prims);
@@ -1749,6 +1753,12 @@ bool photonIntegratorGPU_t::renderTile(renderArea_t &a, int n_samples, int offse
 			case 2:
 				kernel_name = "intersect_rays_test2";
 				break;
+			case 3:
+				kernel_name = "intersect_rays_vec4";
+				break;
+			case 4:
+				kernel_name = "intersect_rays_test2_vec4";
+				break;
 		}
 
 		CLError err;
@@ -1793,7 +1803,7 @@ void photonIntegratorGPU_t::intersect_rays(phRenderState_t &state, CLVectorBuffe
 
 	static int use_debug_buffer = ph_test_rays;
 	if(use_debug_buffer) {
-		dbg.resize(8*nr_rays);
+		dbg.resize(16*nr_rays);
 		queue->writeBuffer(dbg, &err);
 		checkErr(err, "failed to init dbg");
 	}
@@ -1949,12 +1959,28 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			b[2] = t * a[2];
 		}
 \n
+		float4 mulF4(float4 a, float t) {	// b = t * a
+			return (float4)(t*a.x,t*a.y,t*a.z,0.0f);
+		}
+\n
 		float _dot(float a[3], float b[3]) {	// ret = a * b
 			return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 		}
 \n
+		float dotF4_3(float4 a, float4 b) {	// ret = a * b
+			return a.x*b.x + a.y*b.y + a.z*b.z;
+		}
+\n
+		float normSqrF4(float4 a) {	// ret = |a|^2
+			return a.x*a.x + a.y*a.y + a.z*a.z;
+		}
+\n
 		float normSqr(float a[3]) {	// ret = |a|^2
 			return a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
+		}
+\n
+		float4 arrFloat3to4(__global float *a) {
+			return (float4)(a[0], a[1], a[2], 0.0f);
 		}
 \n
 		__kernel void intersect_rays_test2(
@@ -1999,7 +2025,102 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 					continue;
 				det = _dot(ac,apxab) * det;
 				if(det < t_cand) {
-					t_cand = det - 1;
+					t_cand = det;
+					cand = i;
+				}
+			}
+
+			inter_tris[get_global_id(0)] = cand;
+		}
+\n
+		__kernel void intersect_rays_test2_vec4(
+			__global PHInternalNode *int_nodes, 
+			int nr_int_nodes,
+			__global PHLeaf *leaves,
+			float leaf_radius,
+			__global PHTriangle *tris,
+			int nr_tris,
+			__global PHRay *rays,
+			int nr_rays,
+			__global int *inter_tris
+			IF_DEBUG(, __global float *dbg)
+		){
+			if(get_global_id(0) >= nr_rays)
+				return;
+
+			float4 ray_p = arrFloat3to4(rays[get_global_id(0)].p);
+			float4 ray_r = arrFloat3to4(rays[get_global_id(0)].r);
+			IF_DEBUG(
+				int gid = get_global_id(0);
+				int dbg_tri = 33;//23
+			)
+			/*IF_DEBUG(
+				
+				dbg[gid * 8 + 0] = ray_p.x;
+				dbg[gid * 8 + 1] = ray_p.y;
+				dbg[gid * 8 + 2] = ray_p.z;
+				dbg[gid * 8 + 3] = ray_p.w;
+				dbg[gid * 8 + 4] = ray_r.x;
+				dbg[gid * 8 + 5] = ray_r.y;
+				dbg[gid * 8 + 6] = ray_r.z;
+				dbg[gid * 8 + 7] = ray_r.w;
+			)*/
+			int cand = -1;
+			float t_cand = 100000000.0f;
+
+			for(int i = 0; i < nr_tris; ++i)
+			{
+				float4 tri_a = arrFloat3to4(tris[i].a);
+				float4 tri_b = arrFloat3to4(tris[i].b);
+				float4 tri_c = arrFloat3to4(tris[i].c);
+				float4 edge1 = tri_b - tri_a;
+				float4 edge2 = tri_c - tri_a;
+				float4 tvec = ray_p - tri_a;
+				float4 pvec = cross(ray_r, edge2);
+				float det = dotF4_3(edge1, pvec);
+				IF_DEBUG(
+					if(i == dbg_tri) {
+						dbg[gid * 16 + 0] = edge2.x;
+						dbg[gid * 16 + 1] = edge2.y;
+						dbg[gid * 16 + 2] = edge2.z;
+						dbg[gid * 16 + 3] = edge2.w;
+						dbg[gid * 16 + 4] = tvec.x;
+						dbg[gid * 16 + 5] = tvec.y;
+						dbg[gid * 16 + 6] = tvec.z;
+						dbg[gid * 16 + 7] = tvec.w;
+						dbg[gid * 16 + 8] = pvec.x;
+						dbg[gid * 16 + 9] = pvec.y;
+						dbg[gid * 16 + 10] = pvec.z;
+						dbg[gid * 16 + 11] = pvec.w;
+						dbg[gid * 16 + 12] = det;
+					}
+				)
+				//if (/*(det>-0.000001) && (det<0.000001))
+				if (det == 0.0f)
+					continue;
+				float inv_det = 1.0f / det;
+				float u = dotF4_3(tvec,pvec) * inv_det;
+				IF_DEBUG( 
+					if(i == dbg_tri)
+						dbg[gid * 16 + 13] = u;
+				)
+				if (u < 0.0f || u > 1.0f)
+					continue;
+				float4 qvec = cross(tvec,edge1);
+				float v = dotF4_3(ray_r,qvec) * inv_det;
+				IF_DEBUG( 
+					if(i == dbg_tri)
+						dbg[gid * 16 + 14] = v;
+				)
+				if ((v<0.0f) || ((u+v)>1.0f) )
+					continue;
+				float t = dotF4_3(edge2,qvec) * inv_det;
+				IF_DEBUG(
+					if(i == dbg_tri)
+						dbg[gid * 16 + 15] = t;
+				)
+				if(t >= 0.0f && t < t_cand) {
+					t_cand = t;
 					cand = i;
 				}
 			}
@@ -2211,6 +2332,222 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 									} else
 										dbg[0] = 666.0f;
 								)
+							}
+						}
+						break;
+					}
+\n
+					stack |= mask;
+					mask <<= 1;
+					poz *= 2;
+				}
+\n
+				for(int tmp3 = 0; tmp3 < 10000000; tmp3++) // going up
+				{
+					mask >>= 1;
+					if(!mask) {
+						IF_DEBUG(
+							if(get_global_id(0) == 883 && cand_tri == 8)
+								dbg[1] = 1234.6542f;
+						)
+						inter_tris[get_global_id(0)] = cand_tri;
+						return;
+					}
+					if(stack & mask) {
+						// traverse sibling
+						stack &= ~mask;
+						mask <<= 1;
+						poz++;
+						break;
+					}
+					poz /= 2;
+				}
+			}
+		}
+\n
+		__kernel void intersect_rays_vec4(
+			__global PHInternalNode *int_nodes, 
+			int nr_int_nodes,
+			__global PHLeaf *leaves,
+			float leaf_radius,
+			__global PHTriangle *tris,
+			int nr_tris,
+			__global PHRay *rays,
+			int nr_rays,
+			__global int *inter_tris
+			IF_DEBUG(, __global float *dbg)
+		){
+			if(get_global_id(0) >= nr_rays)
+				return;
+
+			IF_DEBUG(
+				int gid = get_global_id(0);
+				int dbg_tri = -1;//23;
+				int dbg_leaf = 1494;
+			)
+
+			float4 ray_p = arrFloat3to4(rays[get_global_id(0)].p);
+			float4 ray_r = arrFloat3to4(rays[get_global_id(0)].r);
+
+			float t_cand = FLT_MAX;
+			int cand_tri = -1;
+\n
+			unsigned int stack = 0;
+			unsigned int mask = 1;
+			unsigned int poz = 1;
+			for(int tmp1 = 0; tmp1 < 10000000; tmp1++) {
+				for(int tmp2 = 0; tmp2 < 10000000; tmp2++) { // going down
+					if(poz < nr_int_nodes) { // check internal node
+						float4 n_c = arrFloat3to4(int_nodes[poz].c);
+						float n_r = int_nodes[poz].r;
+
+						// d(line, center) <= radius ?
+						float4 pc = n_c - ray_p;
+						float4 pcxr = cross(pc, ray_r);
+						float d2 = normSqrF4(pcxr);
+						float r2 = n_r * n_r;
+						if(d2 > r2) {
+							break;
+						}
+\n
+						// is p inside sphere ?
+						if(normSqrF4(pc) > r2) {
+							// exists q on line such that q in sphere
+							// is q in ray's direction ?
+							// if p outside sphere and the line intersects the sphere
+							// then c must lie roughly in the ray's direction
+							float pcr = dotF4_3(pc, ray_r);
+							if(pcr <= 0) {
+								break;
+							}
+							// exists t >= pcr >= 0 => found
+						}
+\n
+					} else { // check leaf 
+						float4 l_m = arrFloat3to4(leaves[poz - nr_int_nodes].m);
+						float4 l_n = arrFloat3to4(leaves[poz - nr_int_nodes].n);
+						int l_tri_idx = leaves[poz - nr_int_nodes].tri_idx;
+
+						float nr = dotF4_3(l_n, ray_r);
+						
+						/*IF_DEBUG(
+							if(poz - nr_int_nodes == dbg_leaf) {
+								dbg[gid * 16 + 0] = l_m.x;
+								dbg[gid * 16 + 1] = l_m.y;
+								dbg[gid * 16 + 2] = l_m.z;
+								dbg[gid * 16 + 3] = l_m.w;
+								dbg[gid * 16 + 4] = l_n.x;
+								dbg[gid * 16 + 5] = l_n.y;
+								dbg[gid * 16 + 6] = l_n.z;
+								dbg[gid * 16 + 7] = l_n.w;
+								dbg[gid * 16 + 8] = (float)l_tri_idx;
+								dbg[gid * 16 + 9] = nr;
+								dbg[gid * 16 + 10] = 1.234f;
+							}
+						)*/
+
+						if(nr >= 0) {
+							break;
+						}
+\n
+						float4 pm = l_m - ray_p;
+						float t = dotF4_3(l_n, pm) / nr;
+						float4 rt = mulF4(ray_r, t);
+						float4 q = ray_p + rt;
+						float4 mq = q - l_m;
+						float d2 = normSqrF4(mq);
+						float r2 = leaf_radius * leaf_radius;
+
+						IF_DEBUG(
+							if(poz - nr_int_nodes == dbg_leaf) {
+								dbg[gid * 16 + 0] = pm.x;
+								dbg[gid * 16 + 1] = pm.y;
+								dbg[gid * 16 + 2] = pm.z;
+								dbg[gid * 16 + 3] = pm.w;
+								dbg[gid * 16 + 4] = rt.x;
+								dbg[gid * 16 + 5] = rt.y;
+								dbg[gid * 16 + 6] = rt.z;
+								dbg[gid * 16 + 7] = rt.w;
+								dbg[gid * 16 + 8] = t;
+								dbg[gid * 16 + 9] = d2;
+								dbg[gid * 16 + 10] = r2;
+								dbg[gid * 16 + 11] = 1234.0f;
+								dbg[gid * 16 + 12] = q.x;
+								dbg[gid * 16 + 13] = q.y;
+								dbg[gid * 16 + 14] = q.z;
+								dbg[gid * 16 + 15] = q.w;
+							}
+						)
+
+						if(d2 < r2) {
+							float4 tri_a = arrFloat3to4(tris[l_tri_idx].a);
+							float4 tri_b = arrFloat3to4(tris[l_tri_idx].b);
+							float4 tri_c = arrFloat3to4(tris[l_tri_idx].c);
+							float4 edge1 = tri_b - tri_a;
+							float4 edge2 = tri_c - tri_a;
+							float4 tvec = ray_p - tri_a;
+							float4 pvec = cross(ray_r, edge2);
+							float det = dotF4_3(edge1, pvec);
+							IF_DEBUG(
+								if(l_tri_idx == dbg_tri) {
+									dbg[gid * 16 + 0] = edge2.x;
+									dbg[gid * 16 + 1] = edge2.y;
+									dbg[gid * 16 + 2] = edge2.z;
+									dbg[gid * 16 + 3] = edge2.w;
+									dbg[gid * 16 + 4] = tvec.x;
+									dbg[gid * 16 + 5] = tvec.y;
+									dbg[gid * 16 + 6] = tvec.z;
+									dbg[gid * 16 + 7] = tvec.w;
+									dbg[gid * 16 + 8] = pvec.x;
+									dbg[gid * 16 + 9] = pvec.y;
+									dbg[gid * 16 + 10] = pvec.z;
+									dbg[gid * 16 + 11] = pvec.w;
+									dbg[gid * 16 + 12] = det;
+								}
+							)
+							//if (/*(det>-0.000001) && (det<0.000001))
+							if (det == 0.0f)
+								break;
+							float inv_det = 1.0f / det;
+							float u = dotF4_3(tvec,pvec) * inv_det;
+							IF_DEBUG( 
+								if(l_tri_idx == dbg_tri)
+									dbg[gid * 16 + 13] = u;
+							)
+							if (u < 0.0f || u > 1.0f)
+								break;
+							float4 qvec = cross(tvec,edge1);
+							float v = dotF4_3(ray_r,qvec) * inv_det;
+							IF_DEBUG( 
+								if(l_tri_idx == dbg_tri)
+									dbg[gid * 16 + 14] = v;
+							)
+							if ((v<0.0f) || ((u+v)>1.0f) )
+								break;
+							float t = dotF4_3(edge2,qvec) * inv_det;
+							IF_DEBUG(
+								if(l_tri_idx == dbg_tri)
+									dbg[gid * 16 + 15] = t;
+							)
+							if(t >= 0.0f && t < t_cand) {
+								t_cand = t;
+								cand_tri = l_tri_idx;
+
+								/*IF_DEBUG(
+									if(gid == dbg_tri) {
+										int idx = get_global_id(0);
+										dbg[0] = (float)(poz-nr_int_nodes);
+										dbg[1] = nr;
+										dbg[2] = det;
+										dbg[3] = inv_det;
+										dbg[4] = u;
+										dbg[5] = v;
+										dbg[6] = t;
+										dbg[7] = d2;
+										dbg[8] = r2;
+									} else
+										dbg[0] = 666.0f;
+								)*/
 							}
 						}
 						break;
