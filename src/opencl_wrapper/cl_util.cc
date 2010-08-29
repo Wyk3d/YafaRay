@@ -59,6 +59,8 @@ CLApplication::CLApplication()
 
 	if(vendor_id == CL_VENDOR_NVIDIA) {
 		cl_build_options += " -cl-nv-verbose";
+	} else if(vendor_id == CL_VENDOR_AMD) {
+		putenv("GPU_DUMP_DEVICE_KERNEL=3");
 	}
 }
 
