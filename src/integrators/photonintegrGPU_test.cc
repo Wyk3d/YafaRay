@@ -624,6 +624,9 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 
 	checkErr(err, "failed to init inter_tris");
 
+	float min_dt = std::numeric_limits<float>::max();
+	int best_tile_size;
+
 	while( (reverse && tile_size >= min_size) || (!reverse && tile_size <= max_size))
 	{
 		int ts2 = tile_size * tile_size * AAsamples;
@@ -649,7 +652,7 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 				pi.getSPforRay(pRay, *state, sp);
 			}
 
-			if(i >= nextStep) {
+			while(i >= nextStep) {
 				pb->update();
 				nextStep += pbStep;
 			}
@@ -669,7 +672,7 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 			for(int k = i; k < j; k++)
 				scene->intersect(state->c_rays[k], sp);
 
-			if(i >= nextStep) {
+			while(i >= nextStep) {
 				pb->update();
 				nextStep += pbStep;
 			}
@@ -683,8 +686,50 @@ void photonIntegratorGPU_t::RayTest::benchmark_ray_count(phRenderState_t &r_stat
 			   << dt1 << "s (" << nr_rays / dt1 << " rays/sec) / "
 			   << dt2 << "s (" << nr_rays / dt2 << " rays/sec)" << yendl;
 
+		if(dt1 < min_dt) {
+			min_dt = dt1;
+			best_tile_size = tile_size;
+		}
+
 		if(reverse) tile_size /= 2;
 		else tile_size *= 2;
+	}
+
+	size_t wg_step = pi.ph_benchmark_wg_step;
+	if(wg_step >= 0)
+	{
+#ifdef CL_VERSION_1_1
+		wg_step = std::max(wg_step, state->intersect_kernel->getPreferredWorkGroupSizeMultiple(pi.device, &err));
+		checkErr(err, "failed to get work group size multiple");
+#endif
+		int wg_max_size = state->intersect_kernel->getWorkGroupSize(pi.device, &err);
+		checkErr(err, "failed to get max work group size");
+
+		Y_INFO << "starting work group size benchmark for tile size " << best_tile_size << ", group size step " << wg_step << ", up to " << wg_max_size << yendl;
+		
+		int ts2 = best_tile_size * best_tile_size;
+		for(int wg_size = 0; wg_size <= wg_max_size; wg_size += wg_step) {
+			pi.ph_work_group_size = std::max(1, wg_size);
+
+			start = clock();
+			for(int i = 0; i < nr_rays; i+=ts2)
+			{
+				int j = std::min(i+ts2,nr_rays);
+				// TODO: this can be done without copying in OpenCL 1.1 by using sub buffers
+				std::copy(state->ph_rays.begin() + i, state->ph_rays.begin() + j, rays.begin());
+				pi.intersect_rays(*state, rays.range(0,j-i), state->inter_tris.range(0,j-i));
+				for(int k = i; k < j; k++) {
+					diffRay_t &pRay = state->c_rays[k];
+					pRay.idx = k-i;
+					pi.getSPforRay(pRay, *state, sp);
+				}
+			}
+			end = clock();
+			float dt = ((float)(end-start)/CLOCKS_PER_SEC);
+
+			Y_INFO << "work group size " << pi.ph_work_group_size << ": "
+				<< dt << "s (" << nr_rays / dt<< " rays/sec)" << yendl;
+		}
 	}
 }
 

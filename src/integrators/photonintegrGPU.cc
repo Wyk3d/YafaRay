@@ -1407,6 +1407,7 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	bool ph_benchmark_ray_count = false;
 	int ph_benchmark_min_tile_size = 4;
 	bool ph_benchmark_reverse = false;
+	int ph_benchmark_wg_step = 16;
 	int ph_candidate_multi = 50;
 
 	params.getParam("transpShad", transpShad);
@@ -1437,6 +1438,7 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	params.getParam("ph_benchmark_ray_count", ph_benchmark_ray_count);
 	params.getParam("ph_benchmark_min_tile_size", ph_benchmark_min_tile_size);
 	params.getParam("ph_benchmark_reverse", ph_benchmark_reverse);
+	params.getParam("ph_benchmark_wg_step", ph_benchmark_wg_step);
 	params.getParam("ph_candidate_multi", ph_candidate_multi);
 
 	// TODO: override thread count and tile size settings if benchmarking is enabled
@@ -1463,6 +1465,7 @@ integrator_t* photonIntegratorGPU_t::factory(paraMap_t &params, renderEnvironmen
 	ite->ph_candidate_multi = ph_candidate_multi;
 	ite->ph_benchmark_min_tile_size = ph_benchmark_min_tile_size;
 	ite->ph_benchmark_reverse = ph_benchmark_reverse;
+	ite->ph_benchmark_wg_step = ph_benchmark_wg_step;
 
 	return ite;
 }

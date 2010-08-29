@@ -61,9 +61,11 @@ class CLKernel :
 			return WorkGroupInfo::getListInfo<size_t>(id, device.getId(), CL_KERNEL_COMPILE_WORK_GROUP_SIZE, &WorkGroupInfoFunc, error);
 		}
 
+#ifdef CL_VERSION_1_1
 		size_t getPreferredWorkGroupSizeMultiple(CLDevice device, CLError *error = NULL) {
 			return WorkGroupInfo::getInfo<size_t>(id, device.getId(), CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, &WorkGroupInfoFunc, error);
 		}
+#endif
 
 		cl_ulong getLocalMemSize(CLDevice device, CLError *error = NULL) {
 			return WorkGroupInfo::getInfo<cl_ulong>(id, device.getId(), CL_KERNEL_LOCAL_MEM_SIZE, &WorkGroupInfoFunc, error);

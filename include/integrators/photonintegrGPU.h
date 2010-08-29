@@ -216,6 +216,7 @@ class YAFRAYPLUGIN_EXPORT photonIntegratorGPU_t: public tiledIntegrator_t, CLApp
 		bool ph_benchmark_ray_count;
 		int ph_benchmark_min_tile_size;
 		bool ph_benchmark_reverse;
+		int ph_benchmark_wg_step;
 		int ph_candidate_multi;
 
 		friend class RayStorer;
