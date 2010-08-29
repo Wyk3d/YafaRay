@@ -28,6 +28,8 @@ class CLKernel :
 		~CLKernel() {
 			
 		}
+
+		typedef CLInfo2<cl_kernel, cl_device_id, cl_kernel_work_group_info> WorkGroupInfo;
 	public:
 		static cl_int InfoFunc(cl_kernel id, cl_kernel_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
 			return clGetKernelInfo(id, info, param_size, param_value, param_size_ret);
@@ -36,6 +38,7 @@ class CLKernel :
 		static cl_int ReleaseFunc(cl_kernel id) {
 			return clReleaseKernel(id);
 		}
+
 		friend class CLProgram;
 
 		std::string getFuncName(CLError *error = NULL) {
@@ -44,6 +47,30 @@ class CLKernel :
 
 		cl_uint getNumArgs(CLError *error = NULL) {
 			return getInfo<cl_uint>(CL_KERNEL_NUM_ARGS, error);
+		}
+
+		static cl_int WorkGroupInfoFunc(cl_kernel id, cl_device_id id2, cl_kernel_info info, size_t param_size, void* param_value, size_t* param_size_ret) {
+			return clGetKernelWorkGroupInfo(id, id2, info, param_size, param_value, param_size_ret);
+		}
+
+		size_t getWorkGroupSize(CLDevice device, CLError *error = NULL) {
+			return WorkGroupInfo::getInfo<size_t>(id, device.getId(), CL_KERNEL_WORK_GROUP_SIZE, &WorkGroupInfoFunc, error);
+		}
+
+		std::list<size_t> getCompileWorkGroupSize(CLDevice device, CLError *error = NULL) {
+			return WorkGroupInfo::getListInfo<size_t>(id, device.getId(), CL_KERNEL_COMPILE_WORK_GROUP_SIZE, &WorkGroupInfoFunc, error);
+		}
+
+		size_t getPreferredWorkGroupSizeMultiple(CLDevice device, CLError *error = NULL) {
+			return WorkGroupInfo::getInfo<size_t>(id, device.getId(), CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, &WorkGroupInfoFunc, error);
+		}
+
+		cl_ulong getLocalMemSize(CLDevice device, CLError *error = NULL) {
+			return WorkGroupInfo::getInfo<cl_ulong>(id, device.getId(), CL_KERNEL_LOCAL_MEM_SIZE, &WorkGroupInfoFunc, error);
+		}
+
+		cl_ulong getPrivateMemSize(CLDevice device, CLError *error = NULL) {
+			return WorkGroupInfo::getInfo<cl_ulong>(id, device.getId(), CL_KERNEL_PRIVATE_MEM_SIZE, &WorkGroupInfoFunc, error);
 		}
 
 		template< typename T >

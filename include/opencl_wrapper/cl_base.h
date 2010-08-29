@@ -119,6 +119,111 @@ class CLInfo
 
 template <
 	typename ObjType,
+	typename ObjType2,
+	typename InfoType
+>
+class CLInfo2
+{
+	public:
+		typedef cl_int (*InfoFuncType2)(ObjType, ObjType2, InfoType, size_t, void*, size_t*);
+
+		template<typename T>
+		static T getInfo(ObjType id, ObjType2 id2, InfoType info, InfoFuncType2 InfoFunc, CLError *error = NULL)
+		{
+			CLErrGuard err(error);
+			T ret = 0;
+
+			// get the size of the info string
+			size_t size;
+			if((err = InfoFunc(id,
+				id2,
+				info,
+				0,
+				NULL,
+				&size)) || sizeof(T) != size)
+				return ret;
+
+			// get the info string
+
+			if(err = InfoFunc(id,
+				id2,
+				info,
+				size,
+				&ret,
+				NULL))
+				return ret;
+
+			return ret;
+		}
+
+		static std::string getStringInfo(ObjType id, ObjType2 id2, InfoType info, InfoFuncType2 InfoFunc, CLError *error = NULL)
+		{
+			CLErrGuard err(error);
+
+			// get the size of the info string
+			size_t size;
+			if(err = InfoFunc(id,
+				id2,
+				info,
+				0,
+				NULL,
+				&size))
+				return "";
+
+			// get the info string
+			char *pbuf = new char[size];
+			if(err = InfoFunc(id,
+				id2,
+				info,
+				size,
+				pbuf,
+				NULL))
+			{
+				delete[] pbuf;
+				return "";
+			}
+
+			return pbuf;
+		}
+
+		template<typename T>
+		static std::list<T> getListInfo(ObjType id, ObjType2 id2, InfoType info, InfoFuncType2 InfoFunc, CLError *error = NULL)
+		{
+			CLErrGuard err(error);
+			std::list<T> ilist;
+
+			// get the size of the info list
+			size_t size;
+			if(err = InfoFunc(id,
+				id2,
+				info,
+				0,
+				NULL,
+				&size))
+				return ilist;
+
+			// get the info list
+			T *info_buf = new T[size/sizeof(T)];
+			if(err = InfoFunc(id,
+				id2,
+				info,
+				size,
+				info_buf,
+				NULL))
+			{
+				delete[] info_buf;
+				return ilist;
+			}
+
+			for(size_t i = 0; i < size / sizeof(T); ++i)
+				ilist.push_back(info_buf[i]);
+
+			return ilist;
+		}
+};
+
+template <
+	typename ObjType,
 	typename InfoType,
 	typename CLObject
 >
