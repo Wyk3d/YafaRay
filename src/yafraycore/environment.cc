@@ -139,10 +139,10 @@ void renderEnvironment_t::loadPlugins(const std::string &path)
 
 bool renderEnvironment_t::getPluginPath(std::string &path)
 {
+#ifdef _WIN32
 	path = "plugins";
 	return true;
 
-#ifdef _WIN32
 	HKEY hkey;
 	DWORD dwType, dwSize;
 	
