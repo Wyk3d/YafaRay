@@ -71,9 +71,11 @@ class CLKernel :
 			return WorkGroupInfo::getInfo<cl_ulong>(id, device.getId(), CL_KERNEL_LOCAL_MEM_SIZE, &WorkGroupInfoFunc, error);
 		}
 
+#ifdef CL_VERSION_1_1
 		cl_ulong getPrivateMemSize(CLDevice device, CLError *error = NULL) {
 			return WorkGroupInfo::getInfo<cl_ulong>(id, device.getId(), CL_KERNEL_PRIVATE_MEM_SIZE, &WorkGroupInfoFunc, error);
 		}
+#endif
 
 		template< typename T >
 		class SetArgHelper {
