@@ -2027,7 +2027,7 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 				if ((v<0.0f) || ((u+v)>1.0f) )
 					continue;
 				float t = _dot(edge2,qvec) * inv_det;
-				if(t < t_cand) {
+				if(t >= 0.0f && t < t_cand) {
 					t_cand = t;
 					cand = i;
 				}
