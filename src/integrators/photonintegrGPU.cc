@@ -2008,27 +2008,27 @@ void photonIntegratorGPU_t::upload_hierarchy(PHierarchy &ph)
 			for(int i = 0; i < nr_tris; ++i)
 			{
 				PHTriangle tri = tris[i];
-				float ab[3], ac[3], ap[3], rxac[3], apxab[3];
-				float det, u, v;
-				sub(tri.b, tri.a, ab);
-				sub(tri.c, tri.a, ac);
-				_cross(ray.r, ac, rxac);
-				det = _dot(ab, rxac);
+				float edge1[3], edge2[3], tvec[3], pvec[3], qvec[3];
+				float det, inv_det, u, v;
+				sub(tri.b, tri.a, edge1);
+				sub(tri.c, tri.a, edge2);
+				_cross(ray.r, edge2, pvec);
+				det = _dot(edge1, pvec);
 				//if (/*(det>-0.000001) && (det<0.000001))
 				if (det == 0.0f)
 					continue;
-				det = 1.0f / det;
-				sub(ray.p, tri.a, ap);
-				u = _dot(ap,rxac) * det;
+				inv_det = 1.0f / det;
+				sub(ray.p, tri.a, tvec);
+				u = _dot(tvec,pvec) * inv_det;
 				if (u < 0.0f || u > 1.0f)
 					continue;
-				_cross(ap,ab,apxab);
-				v = _dot(ray.r,apxab) * det;
+				_cross(tvec,edge1,qvec);
+				v = _dot(ray.r,qvec) * inv_det;
 				if ((v<0.0f) || ((u+v)>1.0f) )
 					continue;
-				det = _dot(ac,apxab) * det;
-				if(det < t_cand) {
-					t_cand = det;
+				float t = _dot(edge2,qvec) * inv_det;
+				if(t < t_cand) {
+					t_cand = t;
 					cand = i;
 				}
 			}
